@@ -138,6 +138,17 @@ class Processor:
             lambda: asyncio.wait_for(send_all(), self.settings.output_ack_timeout_sec), spec.name
         )
 
+    @staticmethod
+    def dlq_headers(record):
+        # A bulk failure must preserve each source trace, including malformed records.
+        context = extract_context_from_headers(record.headers)
+        source = trace.get_current_span(context).get_span_context()
+        current = trace.get_current_span().get_span_context()
+        if source.is_valid and source.trace_id != current.trace_id:
+            with trace.use_span(trace.NonRecordingSpan(source)):
+                return inject_trace_headers(record.headers)
+        return inject_trace_headers(record.headers)
+
     async def dlq(self, spec, records, error, attempts, valid, *, aggregate=None):
         topic = spec.retry_to_dlq.dlq_topic if spec.retry_to_dlq else self.settings.error_topic
 
@@ -167,7 +178,7 @@ class Processor:
                         topic,
                         json.dumps(envelope).encode(),
                         key=record.key,
-                        headers=inject_trace_headers(record.headers),
+                        headers=self.dlq_headers(record),
                     )
                 )
             await asyncio.gather(*futures)
@@ -208,6 +219,7 @@ class Processor:
                 links=[
                     Link(context)
                     for record in records[1:]
+                    if record.headers
                     if (
                         context := trace.get_current_span(
                             extract_context_from_headers(record.headers)

@@ -131,4 +131,19 @@ else:
         finally:
             await runtime.stop()
 
-    asyncio.run(main())
+    import os
+
+    if os.getenv("QF_BENCH_PROFILE"):
+        import cProfile
+
+        profile = cProfile.Profile()
+        profile.enable()
+        try:
+            asyncio.run(main())
+        finally:
+            profile.disable()
+            profile.dump_stats(
+                str(Path(__file__).parent / "results" / f"{args.engine}-{args.workload}.prof")
+            )
+    else:
+        asyncio.run(main())

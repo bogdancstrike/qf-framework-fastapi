@@ -131,6 +131,7 @@ class KafkaRuntime:
                 auto_offset_reset="earliest",
                 isolation_level="read_committed",
                 max_poll_interval_ms=self.settings.max_poll_interval_ms,
+                fetch_max_wait_ms=self.settings.fetch_max_wait_ms,
                 rebalance_timeout_ms=int(self.settings.rebalance_timeout_sec * 1000),
                 **self.security(),
             )

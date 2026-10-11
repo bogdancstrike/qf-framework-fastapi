@@ -1,107 +1,416 @@
-# QF FastAPI + asyncio
+# QF · FastAPI + asyncio
 
-Async-first successor to the QF Flask worker framework. Keep the worker decorators, `config.Config`, endpoint JSON format and tracing helpers; use FastAPI, aiokafka and async Redis underneath. Synchronous workers remain supported through bounded executors.
+[![Validation](https://github.com/bogdancstrike/qf-framework-fastapi/actions/workflows/ci.yml/badge.svg)](https://github.com/bogdancstrike/qf-framework-fastapi/actions/workflows/ci.yml)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-async_first-009688?logo=fastapi&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Requires Python 3.11+. Install in a **separate environment** from the original `qf`: both distributions expose `framework` imports.
+**Build HTTP APIs and reliable Kafka worker pipelines with familiar QF decorators, powered by FastAPI and asyncio.**
 
-## Run the example
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e '.[dev,tracing]'
-uvicorn examples.app:app --port 4000
-curl -X POST http://localhost:4000/examples/echo/42 \
-  -H 'Content-Type: application/json' -d '{"text":"hello"}'
-```
-
-The example starts HTTP without Kafka or Redis. Open `/docs`, `/openapi.json`, `/health/live`, `/health/ready` and `/metrics`.
-
-To enable workers:
-
-```bash
-docker compose -p qf-fastapi-test up -d --wait
-cp .env.example .env
-# Set QSINT_ENABLE_ETL=true in .env
-uvicorn examples.app:app --port 4000
-```
-
-The compose file is single-broker development/test infrastructure. For a containerized application on its network, set `KAFKA_BOOTSTRAP_SERVERS=kafka:9092` and `QSINT_REDIS_URL=redis://redis:6379/0`.
-
-## Existing configuration
-
-```python
-from pathlib import Path
-from config import Config  # your existing uppercase settings
-from framework.app import FrameworkApp
-
-framework = FrameworkApp.from_config(Config, app_root=Path(__file__).parent)
-app = framework.build_app()  # uvicorn main:app
-```
-
-`WORKER_NAME`, `WORKER_MODULE`/`WORKER_MODULES`, `KAFKA_BOOTSTRAP_SERVERS`, `ERROR_TOPIC`, Redis host/port/db/password, and the documented legacy tuning keys are supported. `load_framework_settings()` also discovers `config.Config` when present. Explicit overrides take precedence over environment/dotenv, which take precedence over Config defaults. New settings use `QSINT_` environment names. List/dict values use JSON.
-
-You may also pass `FrameworkSettings` directly. `framework.run()` returns handles with the FastAPI app; resources start in its ASGI lifespan. `framework.serve()` starts Uvicorn or worker-only mode. See [migration](docs/Migration.md) for the changed startup call and async Redis/Kafka helpers.
-
-## Workers
+Declare a worker, choose its input/output topics, and let the runtime manage consumption, bounded concurrency, retries, output acknowledgements and source commits. Combine single-message workers, bulk processing and Redis-backed joins in the same application. Existing synchronous workers, uppercase `config.Config` files, endpoint JSON mappings and tracing helpers remain supported through documented migration paths.
 
 ```python
 from framework.decorators import kafka_handler, retry_to_dlq
 
-
 @retry_to_dlq(max_attempts=3, dlq_topic="text.dlq")
-@kafka_handler(name="normalize", topics_in=["text.in"], topics_out=["text.out"], max_workers=16)
+@kafka_handler(
+    name="normalize", topics_in=["text.in"], topics_out=["text.normalized"], max_workers=16
+)
 async def normalize(message, consumer_name, metadatas):
-    message["text"] = message["text"].strip()
+    return {**message, "text": message["text"].strip()}
+```
+
+> Delivery is **at least once**, with optional Redis replay deduplication. Benchmarks and failure tests are included; their results and limits are documented. This project is an independent successor to QF Flask, not an in-place WSGI replacement.
+
+[Quickstart](#quickstart) · [Worker recipes](#worker-recipes) · [Benchmarks](#measured-benchmarks) · [Tracing](#observability-and-distributed-tracing) · [Migration](docs/Migration.md) · [Full comparison](docs/qf_flask_vs_qf_fastapi_report.md)
+
+## What you get
+
+| Area | Capabilities |
+|---|---|
+| HTTP | FastAPI/Uvicorn, native ASGI routes, OpenAPI, interactive docs, compiled JSON endpoint mappings, Pydantic validation |
+| Workers | Async handlers, bounded executors for sync handlers, per-worker concurrency, bulk size/age flushing, fanout and filtering |
+| Pipelines | aiokafka consumer/producer, topic routing, partition backpressure, Redis correlation joins and deterministic merge order |
+| Reliability | Manual ACK-gated commits, failed-commit retention, numeric offset gaps, assignment generation fencing, bounded shutdown |
+| Retries | Separate application/transport budgets, exponential backoff with full jitter, fresh inputs, diagnostic DLQ |
+| Idempotency | Idempotent Kafka producer, optional source-coordinate Redis ledger, renewable aggregate claims, completion tombstones |
+| Policies | Worker retry/rate/circuit decorators and function-level retry/rate/circuit wrappers, async and sync support |
+| Observability | Prometheus, liveness/readiness, structured JSON logs, sanitized request IDs, W3C trace propagation, optional OTLP export |
+| Developer experience | Validated environment settings, legacy Config bridge, runnable examples, Dockerfile, CI, unit/E2E/stress/load benchmarks |
+
+## A pipeline, end to end
+
+```mermaid
+flowchart LR
+    API[FastAPI ingress] --> Input[(Kafka: events.in)]
+    Input --> Normalize[Normalize worker]
+    Normalize --> A[(Kafka: analysis.a)]
+    Normalize --> B[(Kafka: analysis.b)]
+    A --> WA[Async worker A]
+    B --> WB[Async worker B]
+    WA --> JA[(Kafka: result.a)]
+    WB --> JB[(Kafka: result.b)]
+    JA --> Join[Aggregator worker]
+    JB --> Join
+    Join <--> Redis[(Redis parts / renewable lease / tombstone)]
+    Join --> Output[(Kafka: events.complete)]
+    Normalize -. exhausted handler retries .-> DLQ[(Kafka: diagnostic DLQ)]
+    WA -. exhausted handler retries .-> DLQ
+    WB -. exhausted handler retries .-> DLQ
+    Join -. exhausted handler retries .-> DLQ
+    classDef broker fill:#e9f2ff,stroke:#4a78b5,color:#132b4d
+    classDef worker fill:#e4f7ef,stroke:#16865c,color:#123d2e
+    classDef storage fill:#fff0e6,stroke:#c97932,color:#653713
+    class Input,A,B,JA,JB,Output,DLQ broker
+    class Normalize,WA,WB,Join worker
+    class Redis storage
+```
+
+Kafka carries durable stage boundaries. Workers transform messages and publish acknowledged outputs. Redis stores incomplete join parts and coordinates ownership of completed correlations. Replicas in the same consumer group share input partitions. Declare one worker per topic in a process; use separate groups when multiple applications must each consume the same topic.
+
+## Quickstart
+
+Requires **Python 3.11+**. Install in a separate environment from QF Flask: both distributions export `framework`.
+
+```bash
+git clone https://github.com/bogdancstrike/qf-framework-fastapi.git
+cd qf-framework-fastapi
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e '.[dev,tracing]'
+uvicorn examples.app:app --port 4000
+```
+
+The bundled example starts HTTP without Kafka or Redis:
+
+```bash
+curl -X POST http://localhost:4000/examples/echo/42 \
+  -H 'Content-Type: application/json' -d '{"text":"hello asyncio"}'
+# {"id":42,"operation":"echo","payload":{"text":"hello asyncio"}}
+
+curl http://localhost:4000/health/ready
+curl http://localhost:4000/metrics
+```
+
+Open [interactive API docs](http://localhost:4000/docs), [OpenAPI JSON](http://localhost:4000/openapi.json), `/health/live`, `/health/ready` and `/metrics`.
+
+### Enable the bundled Kafka workers
+
+```bash
+docker compose -p qf-fastapi-test up -d --wait
+cp .env.example .env
+# Set QSINT_ENABLE_ETL=true in .env, then restart Uvicorn.
+uvicorn examples.app:app --port 4000
+```
+
+From a second terminal, publish a message and read its result:
+
+```bash
+printf '%s\n' '{"id":"demo-1","text":"  hello pipeline  "}' | \
+  docker compose -p qf-fastapi-test exec -T kafka \
+  /opt/kafka/bin/kafka-console-producer.sh \
+  --bootstrap-server kafka:9092 --topic text.in
+
+docker compose -p qf-fastapi-test exec -T kafka \
+  /opt/kafka/bin/kafka-console-consumer.sh \
+  --bootstrap-server kafka:9092 --topic text.normalized --from-beginning --max-messages 1
+```
+
+Local infrastructure endpoints: Kafka `localhost:29092`, Redis `localhost:26379`, Jaeger UI `http://localhost:26686`, OTLP gRPC `http://localhost:24317`. The compose stack is development infrastructure with one Kafka broker; it is not a replicated production deployment.
+
+## Create your own application
+
+### Native settings and routes
+
+Save as `main.py`:
+
+```python
+from framework.app import FrameworkApp
+from framework.config import FrameworkSettings
+
+settings = FrameworkSettings(enable_etl=False, enable_dynamic_endpoints=False)
+framework = FrameworkApp(settings)
+app = framework.build_app()
+
+@app.get("/hello/{name}")
+async def hello(name: str):
+    return {"hello": name}
+```
+
+Run `uvicorn main:app --port 4000`. Native FastAPI routes, dependencies and application state are available alongside framework endpoints.
+
+For a worker application, use:
+
+```python
+settings = FrameworkSettings(
+    worker_modules=["myapp.workers"],
+    kafka_bootstrap_servers="localhost:29092",
+    consumer_name="myapp-v1",
+    enable_dynamic_endpoints=False,
+    redis_url="redis://localhost:26379/0",
+)
+```
+
+Redis is connected when an aggregator or the optional replay ledger needs it. Ordinary workers require Kafka only.
+
+### Keep your existing `config.py`
+
+```python
+from pathlib import Path
+from config import Config
+from framework.app import FrameworkApp
+
+framework = FrameworkApp.from_config(Config, app_root=Path(__file__).parent)
+app = framework.build_app()
+```
+
+The bridge supports `WORKER_NAME`, `WORKER_MODULE`/`WORKER_MODULES`, `KAFKA_BOOTSTRAP_SERVERS`, `ERROR_TOPIC`, Redis connection fields and documented tuning keys. Explicit overrides take precedence over environment/dotenv, which take precedence over Config defaults. New environment names use `QSINT_`; lists/dicts use JSON:
+
+```dotenv
+QSINT_WORKER_MODULES=["myapp.workers"]
+QSINT_CONSUMER_NAME=myapp-v1
+QSINT_KAFKA_BOOTSTRAP_SERVERS=localhost:29092
+QSINT_PENDING_MAX_PER_TP=750
+QSINT_COMMIT_TICK_SEC=0.2
+QSINT_IDEMPOTENCY_ENABLED=false
+```
+
+See the [complete configuration reference](docs/Configuration.md) and [migration guide](docs/Migration.md). `framework.run()` returns handles; resources start in ASGI lifespan. For worker-only execution, set `enable_api=False` and call `framework.serve()` under a main guard.
+
+## Worker recipes
+
+Every worker receives `(message_or_batch, consumer_name, metadatas)` and returns a dict, list of dicts, or `None`. Native async workers run directly on the event loop. Sync workers run in bounded executors with tracing context propagated. Use async external clients inside `async def`; CPU-heavy work belongs in separate processes/services.
+
+### Fan out to two downstream stages
+
+```python
+from framework.decorators import kafka_handler
+
+@kafka_handler(
+    name="fanout",
+    topics_in=["events.in"],
+    topics_out=["analysis.a", "analysis.b"],
+    max_workers=16,
+)
+async def fanout(message, consumer_name, metadatas):
+    return message  # The same result is published to both output topics.
+```
+
+Every output topic must acknowledge delivery before the source record completes. Preserve a stable `id` across stages for correlation and downstream idempotency.
+
+### Batch by size or age
+
+```python
+@kafka_handler(
+    name="bulk",
+    topics_in=["bulk.in"],
+    topics_out=["bulk.out"],
+    max_workers=8,
+    bulk_mode=True,
+    batch_size=32,
+    batch_timeout_ms=25,
+)
+async def bulk(messages, consumer_name, metadatas):
+    return [{**message, "processed": True} for message in messages]
+```
+
+Batches stay within one source partition. Quiet partitions flush partial batches when the oldest queued record reaches the configured age; admission policies and occupied worker slots can delay actual dispatch. `max_workers` counts batch jobs, while the uncommitted-record bound counts their individual records.
+
+### Join two topics through Redis
+
+```python
+from framework.decorators import kafka_aggregator
+
+@kafka_aggregator(
+    name="merge",
+    topics_in=["result.a", "result.b"],
+    topics_out=["events.complete"],
+    aggregate_by="id",
+    aggregator_timeout_sec=300,
+    max_workers=8,
+)
+async def merge(message, consumer_name, metadatas):
+    return {**message, "complete": True}
+```
+
+Publish `{"id":"job-42","a":true}` to `result.a` and `{"id":"job-42","b":true}` to `result.b`. The handler receives their merged object once the correlation is complete. Merge precedence follows `topics_in` order; later topics win conflicts. Renewable token-checked claims serialize ownership, and completion tombstones suppress repeated correlations within the timeout window. Redis durability and expiry determine the recovery boundary.
+
+### Keep a synchronous integration
+
+```python
+@kafka_handler(name="legacy", topics_in=["legacy.in"], topics_out=["legacy.out"], max_workers=4)
+def legacy(message, consumer_name, metadatas):
+    return {**message, "processed_by": consumer_name}
+```
+
+Existing blocking integrations can stay synchronous while other workers adopt async clients. Threads cannot be forcibly stopped once user code is running; side effects still need idempotency.
+
+### Filter a message
+
+```python
+@kafka_handler(name="filter", topics_in=["audit.in"], topics_out=["audit.accepted"])
+async def filter_audit(message, consumer_name, metadatas):
+    if message.get("ignore"):
+        return None  # Intentional successful filtering; the input may be committed.
     return message
 ```
 
-The same declaration accepts `def` workers. Async workers must use awaitable clients for network I/O. Keep CPU-heavy work in separate processes/services. One worker owns each input topic; replicas scale through Kafka partitions and a shared consumer group. Handler completion order may differ from input order; consumers needing ordered output should use an appropriate concurrency/partitioning design.
+Use `@retry_to_dlq`, `@rate_limit` and `@circuit_breaker` for worker policies; function-level `call_retry`, `call_rate_limit` and `call_circuit_breaker` are also exported. Their arguments and behavior are documented in [Migration.md](docs/Migration.md) and the decorator modules.
 
-For batches, set `bulk_mode=True`, `batch_size=32`, `batch_timeout_ms=25`; the function receives a list. For joins use `@kafka_aggregator(topics_in=[...], aggregate_by="id", ...)`. See [examples/workers.py](examples/workers.py).
+## JSON endpoint mappings
 
-## Delivery, retries and idempotency
+Existing namespace/model/endpoint declarations are compiled once into FastAPI routes and Pydantic schemas. Example `maps/endpoint.json`:
 
-Inputs are committed only after all output or DLQ acknowledgements. The producer uses idempotence and `acks=all`. Handler retries use fresh input copies, capped exponential backoff and full jitter. Broker/Redis operations have a separate retry budget. Failed commits retain progress. Exhausted transport/commit budgets make readiness fail and preserve uncommitted inputs for replay.
+```json
+{
+  "namespaces": [{"name": "examples", "description": "Example API"}],
+  "models": {
+    "Echo": {"text": {"type": "string", "args": {"required": true}}}
+  },
+  "endpoints": [{
+    "namespace": "examples",
+    "operation_name": "echo",
+    "model_name": "Echo",
+    "request_method": ["POST"],
+    "api_url": "/examples/echo/<int:item_id>",
+    "exec_method": {"module_name": "examples.handlers", "method_name": "echo"}
+  }]
+}
+```
 
-This is **at-least-once delivery**. A crash between output acknowledgement and source commit can duplicate an output. Preserve stable message IDs and make downstream effects idempotent. Optional `QSINT_IDEMPOTENCY_ENABLED=true` adds a Redis source-record ledger and renewable claims to skip completed replays. It still has an ACK-to-ledger crash window and a finite TTL; it does not promise exactly-once business effects. Correlation-based aggregation has its own completion tombstones.
-
-Malformed input goes to a diagnostic DLQ envelope with original bytes, source coordinates, attempts and error type. Retry attempts restart after process loss. Redis joins acknowledge incomplete parts after storage and require durable Redis persistence. Read [operations and recovery](docs/Operations.md) before production use.
-
-## Observability
-
-JSON logs include request IDs and active trace IDs. Prometheus metrics cover worker outcomes/retries/duration, queues, uncommitted records, inflight jobs, lag, circuits, commit failures and event-loop delay. HTTP metric labels use route templates.
-
-Tracing helper names remain unchanged:
+Native async handlers receive a Starlette request:
 
 ```python
-from framework.tracing import get_tracer, inject_trace_headers, extract_context_from_headers
-
-with get_tracer().start_as_current_span("my.operation") as span:
-    span.set_attribute("application.phase", "enrich")
+async def echo(app, request, operation, item_id: int):
+    return {"id": item_id, "operation": operation, "payload": await request.json()}
 ```
 
-Install `.[tracing]`, set `QSINT_ENABLE_TRACING=true` and `QSINT_OTLP_ENDPOINT`; local insecure collectors additionally need `QSINT_OTLP_INSECURE=true`. HTTP and Kafka context propagation is explicit. Tracing is off by default.
+Legacy sync handlers receive a compatibility adapter with `get_json()`, `json`, `args` and `headers`; `(body, status)` and `(body, status, headers)` responses work. Flask globals/extensions require migration. See the [runnable endpoint example](examples/maps/endpoint.json).
 
-## Validate and benchmark
+## How reliability works
+
+```mermaid
+sequenceDiagram
+    participant K as Kafka source
+    participant R as Async runtime
+    participant W as Worker
+    participant O as Kafka output / DLQ
+    K->>R: Fetch and register source offsets
+    R->>W: Dispatch within bounded capacity
+    W-->>R: Result or handler failure
+    R->>O: Publish output, or DLQ after handler retries
+    O-->>R: Broker acknowledgement
+    R->>R: Complete fetched records
+    R->>K: Commit completed prefix
+    K-->>R: Commit acknowledgement
+    R->>R: Remove acknowledged progress
+```
+
+- **Bounded backpressure:** queues, active jobs and all fetched records awaiting commit are bounded, including completed records behind a slow predecessor.
+- **Safe progress tracking:** commits follow actual fetched offsets, permit numeric gaps, and never advance past unfinished fetched work. Failed commits retain their candidates.
+- **Separate retry budgets:** handler failures retry with fresh input copies and jitter; transport retries do not needlessly rerun successful user code.
+- **Visible terminal failure:** exhausted output/DLQ/commit budgets fail readiness and leave uncommitted input available for replay.
+- **Rebalance and shutdown:** bounded drain, cancellation, generation fencing and final acknowledged progress commits.
+
+There is an output-ACK-to-source-commit crash window. Optional `QSINT_IDEMPOTENCY_ENABLED=true` adds a Redis source-coordinate completion ledger, narrowing completed replay duplication but retaining an ACK-to-ledger crash window and finite TTL. It does not deduplicate arbitrary repeated business IDs at new offsets. Producer idempotence, Redis leases and tombstones do not make external effects exactly once. Read [operations and recovery](docs/Operations.md) for detailed boundaries and DLQ replay instructions.
+
+## Observability and distributed tracing
+
+| Endpoint / signal | What to inspect |
+|---|---|
+| `/health/live` | HTTP availability |
+| `/health/ready` | Startup/shutdown state and ETL runtime health |
+| `/metrics` | Worker outcomes/retries/duration, queues, uncommitted records, inflight jobs, partition lag, circuits and scheduler delay |
+| JSON logs | Request IDs, active trace/span IDs and structured failure events |
+| OTLP / Jaeger | HTTP and downstream worker spans connected through W3C Kafka headers |
+
+```dotenv
+QSINT_ENABLE_TRACING=true
+QSINT_OTLP_ENDPOINT=http://localhost:24317
+QSINT_OTLP_INSECURE=true
+QSINT_SERVICE_NAME=my-worker
+```
+
+Tracing is optional and disabled by default. Install `.[tracing]`; use TLS with your production collector. Existing helpers remain available:
+
+```python
+from framework.tracing import get_tracer, inject_trace_headers
+
+with get_tracer().start_as_current_span("application.enrich") as span:
+    span.set_attribute("application.stage", "enrich")
+    # Worker output propagation is automatic.
+    # For manual publishes: headers=inject_trace_headers()
+```
+
+The real collector test crosses **four independent processes**, HTTP, Kafka fanout and a Redis join, then queries Jaeger to verify one trace ID and resolvable parent links. Archived proof: [verification](benchmarks/results/jaeger_verification.json) and [full trace](benchmarks/results/jaeger_trace.json). Open the `ui_url` in the verification file while the local Jaeger container is running. See [Tracing.md](docs/Tracing.md) for batch lineage, join parenting and custom publication.
+
+## Measured benchmarks
+
+Results come from real local Kafka/Redis and loopback HTTP on an AMD Ryzen 9 9950X3D host, Python 3.12.3. Raw repetitions, dependency versions, CPU/RSS and latency percentiles are included. These are finite synthetic workloads on one broker, not production capacity guarantees.
+
+<!-- BENCHMARK_TABLES_START -->
+Benchmark tables are generated from the tracked raw measurements; see the [comprehensive comparison](docs/qf_flask_vs_qf_fastapi_report.md).
+<!-- BENCHMARK_TABLES_END -->
+
+The stock Flask single-message path can be faster by returning before output ACK. The explicitly labeled `original_ack` harness variant waits for single-message output ACKs, but retains the original coordinator/DLQ/aggregation defects. HTTP results are mixed and include load-driver contention at high concurrency. Large-batch tests exposed a fetch-wait bottleneck: reducing the new consumer's configurable default from 500 to 50 ms improved the measured 5,000-record bulk workload, while successful original bulk runs remained competitive. The report includes timeout trials and successful-trial counts.
+
+[Full methodology and comparison](docs/qf_flask_vs_qf_fastapi_report.md) · [Raw measurements](benchmarks/results) · [Reproduction guide](benchmarks/README.md)
+
+## Test and benchmark it yourself
 
 ```bash
+# Unit / regression checks; live-service tests skip by default.
 python -m pytest -q
-QF_INTEGRATION=1 python -m pytest tests/test_e2e.py -v
-ruff check . && ruff format --check .
+ruff check .
+ruff format --check .
 python -m build
-python benchmarks/compare_pipelines.py --messages 10000 --repeats 5
-python benchmarks/compare_http.py --requests 10000 --repeats 5
+
+# Real Kafka + Redis, including process crash / restart.
+QF_INTEGRATION=1 python -m pytest tests/test_e2e.py tests/test_crash_recovery.py -v
+
+# Real OTLP export and linked spans queried from Jaeger.
+QF_JAEGER=1 python -m pytest tests/test_otlp_jaeger.py -v
+
+# Stress: 10,000 records, transient handler failures and bounded capacity.
+QF_INTEGRATION=1 QF_STRESS_MESSAGES=10000 python -m pytest tests/test_e2e.py -k stress -v
+
+# Explicit broker outage test: pauses only the dedicated test Kafka container.
+QF_INTEGRATION=1 QF_CHAOS=1 python -m pytest tests/test_chaos.py -v
+
+# Run benchmark suites sequentially, outside failure-injection tests.
+python benchmarks/compare_pipelines.py --messages 1000 --repeats 3
+python benchmarks/compare_http.py --requests 1000 --repeats 3
 ```
 
-Comparison scripts require the original sibling project's `.venv` and its dependencies, including gevent. They execute the original source without changing it. The original ACK-gated benchmark variant is explicitly labeled as a harness patch. Benchmark workloads use isolated temporary topics; raw measurements and dependency snapshots are in [benchmarks/results](benchmarks/results). Run suites sequentially to avoid interference.
+Tests cover failed commits, out-of-order completion, numeric gaps, malformed input, output/DLQ failure, async/sync/bulk/aggregate workers, concurrency, lease renewal, crash replay, overload bounds, shutdown, schema validation and trace propagation. CI runs Python 3.11/3.12/3.13 checks and dedicated service integration tests. See [benchmarks/README.md](benchmarks/README.md) for original-environment setup and every test profile.
 
-The comprehensive comparison is [qf_flask_vs_qf_fastapi_report.md](../qf_flask_vs_qf_fastapi_report.md). Read its methodology and limitations before treating measured throughput as a production capacity estimate.
+## Project map
 
-## Documentation
+```text
+src/framework/
+  api/           FastAPI factory, middleware and JSON route compiler
+  app/           FrameworkApp and lifespan / worker-only runner
+  config/        Validated settings and legacy Config bridge
+  decorators/    Worker registration, retry/rate/circuit and locking policies
+  etl/           Bounded scheduler, processing and commit coordinator
+  redis/         Async helpers, aggregation and optional replay ledger
+  streams/       Async Kafka convenience client
+  tracing/       W3C propagation and optional OTLP provider
+  commons/       JSON logging and retained domain utilities
+examples/        Runnable HTTP, worker and configuration examples
+tests/           Unit, live integration, stress, crash and tracing checks
+benchmarks/      Matched original/new harnesses and tracked raw results
+docs/            Specifications, architecture, operations and comparison
+```
+
+## Documentation and contributing
 
 - [Specification](docs/specs.md), [architecture](docs/architecture.md), [task status](docs/tasks.md)
-- [Migration and compatibility](docs/Migration.md)
-- [Operations, configuration and failure recovery](docs/Operations.md)
-- [Original code analysis](docs/Analysis.md)
-- [Test and benchmark guide](benchmarks/README.md)
+- [Migration and compatibility](docs/Migration.md), [configuration](docs/Configuration.md)
+- [Operations and failure recovery](docs/Operations.md), [distributed tracing](docs/Tracing.md)
+- [Original code analysis](docs/Analysis.md), [Flask versus FastAPI comparison](docs/qf_flask_vs_qf_fastapi_report.md)
+- [Testing and benchmark guide](benchmarks/README.md)
+
+For changes, install `.[dev,tracing]`, add focused behavioral regressions, and run lint plus the relevant test profile. Include benchmark methodology and raw results for performance claims. Report reproducible bugs and improvement proposals through [GitHub issues](https://github.com/bogdancstrike/qf-framework-fastapi/issues). Production multi-broker failover, Redis data-loss recovery and long soak capacity remain deployment-specific validation work.
+
+Released under the [MIT license](LICENSE). The QF API patterns and retained utility code originate from the existing QSINT framework.

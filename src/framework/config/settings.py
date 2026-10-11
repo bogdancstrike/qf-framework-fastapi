@@ -35,6 +35,7 @@ class FrameworkSettings(BaseSettings):
         default=None, validation_alias=AliasChoices("WORKER_NAME", "QSINT_CONSUMER_NAME")
     )
     error_topic: str = Field(default="qf.errors", min_length=1)
+    fetch_max_wait_ms: int = Field(default=50, ge=1)
     poll_timeout_ms: int = Field(default=25, ge=1)
     poll_max_records: int = Field(default=500, ge=1)
     pending_max_per_tp: int = Field(default=750, ge=1)

@@ -74,3 +74,27 @@ async def test_bulk_keeps_each_message_trace_id(settings, spec, monkeypatch):
     ]
     assert actual == trace_ids
     provider.shutdown()
+
+
+async def test_bulk_dlq_keeps_each_message_trace_id(settings, spec, monkeypatch):
+    from dataclasses import replace
+
+    async def broken(*args):
+        raise ValueError("invalid")
+
+    provider = TracerProvider()
+    monkeypatch.setattr(tracing, "_tracer", provider.get_tracer("test"))
+    producer = Producer()
+    trace_ids = ["12345678901234567890123456789012", "22345678901234567890123456789012"]
+    records = [
+        record(i, headers=[("traceparent", f"00-{tid}-1234567890123456-01".encode())])
+        for i, tid in enumerate(trace_ids)
+    ]
+    await Processor(settings, producer, Metrics()).handle(
+        replace(spec, fn=broken, bulk_mode=True), records, lambda: True
+    )
+    actual = [
+        dict(item[2]["headers"])["traceparent"].decode().split("-")[1] for item in producer.sent
+    ]
+    assert actual == trace_ids
+    provider.shutdown()
