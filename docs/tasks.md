@@ -14,6 +14,8 @@ Status is updated as work is implemented and verified. A checked item means its 
 - [x] Fix terminal-runtime liveness so configured Kubernetes probes can restart failed ETL pods.
 - [x] Expand the examples README into a step-by-step tutorial; add a runnable competing-call SingleExecute example.
 - [x] Document 20 future feature proposals separately from implemented scope.
+- [x] Verify Python 3.15.0 final with 170 unit tests, the full 189-test live profile, native dependencies, pip check, package build and clean-wheel HTTP smoke.
+- [x] Extend unit/build CI to 3.11–3.15 and real-service jobs to 3.12/3.15; preserve historical Python 3.12 benchmark provenance.
 
 ## Specification and baseline
 

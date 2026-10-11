@@ -7,6 +7,7 @@ Start with the path matching what you need to do.
 | Run an API and your first complete worker pipeline | [Getting started](GettingStarted.md) |
 | Understand worker arguments, returns, ordering, batches and joins | [Worker contracts and cookbook](Workers.md) |
 | Run tests or reproduce a performance claim | [Testing and validation](Testing.md) |
+| Check interpreter support, including Python 3.15 | [Python compatibility and evidence](PythonCompatibility.md) |
 | Diagnose stalled pipelines, duplicates or missing spans | [Troubleshooting](Troubleshooting.md) |
 | Move an existing Flask/gevent application | [Migration](Migration.md) |
 | Find an exact setting, default or legacy alias | [Configuration reference](Configuration.md) |

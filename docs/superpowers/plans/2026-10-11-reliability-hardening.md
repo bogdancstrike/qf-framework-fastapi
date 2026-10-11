@@ -24,7 +24,7 @@ Keep the original framework unchanged. Exercise independent OS processes with sh
 
 ## Python 3.15 compatibility
 
-- [ ] Verify stable release and obtain an isolated 3.15 interpreter without replacing system Python or the existing benchmark environment.
-- [ ] Install the complete dev/tracing dependency set and record versions; reproduce and fix any framework compatibility failures without hiding unsupported dependencies.
-- [ ] Run unit tests, full Kafka/Redis/chaos/replica/Jaeger tests and wheel/sdist build on 3.15. Preserve previous benchmark provenance; do not infer a 3.15 speedup without measurements.
-- [ ] Add supported interpreter versions to CI, document exact executed results in both reports, commit and push, and check CI.
+- [x] Verify stable release and obtain an isolated 3.15 interpreter without replacing system Python or the existing benchmark environment.
+- [x] Install the complete dev/tracing dependency set and record versions; reproduce and fix any framework compatibility failures without hiding unsupported dependencies.
+- [x] Run unit tests, full Kafka/Redis/chaos/replica/Jaeger tests and wheel/sdist build on 3.15. Preserve previous benchmark provenance; do not infer a 3.15 speedup without measurements.
+- [x] Add supported interpreter versions to CI, document exact executed results in both reports, commit and push, and check CI.

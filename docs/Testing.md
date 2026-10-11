@@ -19,7 +19,7 @@ ruff format --check .
 python -m build
 ```
 
-The default pytest run exercises unit/regression tests and skips service-dependent tests. It does not prove your Kafka or OTLP deployment works. CI runs the unit suite on Python 3.11, 3.12 and 3.13, plus a dedicated live-service job. Throughput thresholds are intentionally absent from shared CI runners.
+The default pytest run exercises unit/regression tests and skips service-dependent tests. It does not prove your Kafka or OTLP deployment works. CI runs unit/build checks on Python 3.11–3.15 and dedicated live-service jobs on 3.12 and 3.15. Local Python 3.15.0 also passed the full 189-test profile; [compatibility evidence](PythonCompatibility.md) records exact versions and scope. Throughput thresholds are intentionally absent from shared CI runners.
 
 ## Real-service profiles
 

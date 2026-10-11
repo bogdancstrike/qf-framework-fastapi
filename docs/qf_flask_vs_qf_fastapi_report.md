@@ -60,7 +60,7 @@ The migration is justified for reviewable recovery boundaries, native async inte
 | Dimension | Configuration |
 |---|---|
 | Host | AMD Ryzen 9 9950X3D, 16 physical / 32 logical CPUs, Linux x86_64, all 32 CPUs available; no affinity pinning |
-| Python | 3.12.3 locally; CI additionally checks 3.11 and 3.13 |
+| Python | Benchmarks: 3.12.3; CI compatibility: 3.11–3.15; full local live suite also verified on 3.15.0 final |
 | Infrastructure | Docker Apache Kafka 3.9.1 single broker/controller; Redis 7.4 Alpine; Jaeger all-in-one 1.62.0 |
 | Durability | Kafka replication factor 1; producer `acks=all`; Redis AOF everysec; no replicated storage proof |
 | Worker trials | Separate worker processes and Python environments, four partitions, 128-record warmup, three repetitions, alternating engine order |
@@ -266,7 +266,7 @@ Further fixes include policy wrappers applied outside worker registration, unsaf
 
 ## Live-service validation and recovery contract
 
-At benchmark completion, the local suite passed **132 tests**: 120 unit/regression checks and 12 live-service checks, including 10,000-record stress. GitHub CI also passed Python 3.11/3.12/3.13 and the dedicated service-integration job. The historical validation record is in [validation.json](../benchmarks/results/validation.json). The documentation follow-up passed the expanded **133-test** live suite, adding the runnable HTTP/fanout/Redis-join application and CLI check. A focused follow-up also verifies repeat provisioning, historical-output isolation, schema errors and the documented retry/DLQ example. The reliability/replica follow-up now passes **189 tests** (170 unit/regression and 19 live), in 132.83 seconds locally. Its new measurements are separate from these historical benchmark snapshots. Tests include:
+At benchmark completion, the local suite passed **132 tests**: 120 unit/regression checks and 12 live-service checks, including 10,000-record stress. GitHub CI also passed Python 3.11/3.12/3.13 and the dedicated service-integration job. The historical validation record is in [validation.json](../benchmarks/results/validation.json). The documentation follow-up passed the expanded **133-test** live suite, adding the runnable HTTP/fanout/Redis-join application and CLI check. A focused follow-up also verifies repeat provisioning, historical-output isolation, schema errors and the documented retry/DLQ example. The reliability/replica follow-up now passes **189 tests** (170 unit/regression and 19 live), in 132.83 seconds locally on Python 3.12. Its new measurements are separate from these historical benchmark snapshots. Tests include:
 
 | Test family | Executed behavior | Result / scope |
 |---|---|---|
@@ -297,9 +297,9 @@ Important remaining boundaries:
 
 ## OTLP evidence in Jaeger
 
-Latest archived verification: trace **`542dd203932b5b29251a72264fd37d3f`**, **13 spans**, **12 parent-child references**, services `qf-otlp-a, qf-otlp-b, qf-otlp-ingress, qf-otlp-merge`. Every returned span shared the HTTP trace ID; all references resolved within that trace; one `POST /publish` root existed; final Kafka output carried the same trace ID.
+Latest archived verification: trace **`b90e1ac25a4ef2760864566b2bbefee9`**, **13 spans**, **12 parent-child references**, services `qf-otlp-a, qf-otlp-b, qf-otlp-ingress, qf-otlp-merge`. Every returned span shared the HTTP trace ID; all references resolved within that trace; one `POST /publish` root existed; final Kafka output carried the same trace ID.
 
-[Open the local Jaeger trace](http://localhost:26686/trace/542dd203932b5b29251a72264fd37d3f) while the current development container is running. [Verification JSON](../benchmarks/results/jaeger_verification.json) and [complete Jaeger response](../benchmarks/results/jaeger_trace.json) preserve the proof after ephemeral Jaeger storage resets.
+[Open the local Jaeger trace](http://localhost:26686/trace/b90e1ac25a4ef2760864566b2bbefee9) while the current development container is running. [Verification JSON](../benchmarks/results/jaeger_verification.json) and [complete Jaeger response](../benchmarks/results/jaeger_trace.json) preserve the proof after ephemeral Jaeger storage resets.
 
 Fanout branches share context. The aggregate handler is parented to the completing arrival; prior parts remain visible in the trace but their contexts are not stored as explicit multi-parent Redis join links. Distinct-root inputs are not merged into one trace ID. Bulk outputs preserving source IDs retain each source trace through a producer span linked to the batch; changed/new IDs fall back to the batch trace. Unit tests cover distinct trace IDs in bulk and DLQ. Outbound HTTP/manual publishing needs instrumentation or explicit header injection; see [Tracing.md](Tracing.md).
 
@@ -363,6 +363,14 @@ A deployment bug was also fixed: terminal ETL errors now fail `/health/live` as 
 The utility audit adds regression coverage for fast SingleExecute ownership loss and fractional leases, stale circuit completions, async/sync client mismatch, cancelled lease cleanup, Kafka/Redis resource ownership, finite JSON serialization and short/extended APDU and byte-length boundaries. `framework.instances` is an empty namespace in both frameworks; application resources belong in lifespan/app state. See [Utilities](Utilities.md) and the expanded [example tutorial](../examples/README.md).
 
 Current validation: **189 passed**, zero skips in the full live profile, including 10,000-message stress, dedicated broker pause, process failures and refreshed real Jaeger evidence. Default tests pass 170 with 19 opt-in skips. The Starlette TestClient/httpx deprecation warning remains. [Twenty proposed features](Roadmap.md) are recommendations awaiting user selection, not implemented capabilities.
+
+## Python 3.15.0 compatibility follow-up
+
+Python 3.15.0 final passed **170 unit/regression tests** and the complete **189-test live profile** with zero skips/failures, including Kafka/Redis, replica kills/replacement, committed partial joins, excess replicas, broker outage, 10,000-record stress and real Jaeger. Full local elapsed time was 139.19 seconds; that duration includes synchronization/timeouts and is not a throughput benchmark. Dependency installation and `pip check` passed without framework runtime changes or unsupported ABI/pure-Python workarounds. Wheel/sdist builds, a clean-wheel HTTP smoke without tracing SDK extras and the competing-call SingleExecute example passed.
+
+CI now checks unit/build behavior on Python **3.11–3.15**, with live-service jobs on **3.12 and 3.15**. The tested local build is standard GIL CPython on Linux x86_64; free-threaded/JIT and other platforms were not validated. Exact versions, source archive hash and limits are in [Python compatibility](PythonCompatibility.md), [validation JSON](../benchmarks/results/python315_validation.json), [dependency freeze](../benchmarks/results/python315_dependencies.txt) and [3.15 replica evidence](../benchmarks/results/horizontal_recovery_python315.json).
+
+The historical 1k/100k Flask comparisons and 10k reliability/join benchmarks remain **Python 3.12.3 measurements**. No Python 3.15 performance multiplier is inferred from compatibility tests.
 
 ## Reproduction and artifact index
 

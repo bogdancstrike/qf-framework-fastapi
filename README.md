@@ -73,6 +73,8 @@ Kafka carries durable stage boundaries. Workers transform messages and publish a
 
 Requires **Python 3.11+**. Install in a separate environment from QF Flask: both distributions export `framework`.
 
+Python **3.15.0 stable** passed all **189 tests**, including live Kafka/Redis, replica crashes, broker outage and real Jaeger. CI covers Python **3.11–3.15**, with live-service jobs on 3.12 and 3.15. See [interpreter compatibility and exact dependency evidence](docs/PythonCompatibility.md). Performance tables below retain their original Python 3.12 measurements.
+
 ```bash
 git clone https://github.com/bogdancstrike/qf-framework-fastapi.git
 cd qf-framework-fastapi
@@ -491,7 +493,7 @@ python benchmarks/compare_http.py --requests 1000 --repeats 3
 
 The expanded local suite passed **189 tests**, including the runnable pipeline walkthrough, Kafka/Redis, 10,000-record stress, SIGKILL recovery, broker outage, six multi-process replica scenarios and real Jaeger checks. The default profile runs 170 unit/regression tests and skips 19 opt-in live tests. Historical 132/133-test checkpoints and the current hardening follow-up are preserved in [validation evidence](benchmarks/results/validation.json).
 
-Tests cover failed commits, out-of-order completion, numeric gaps, malformed input, output/DLQ failure, async/sync/bulk/aggregate workers, concurrency, lease renewal, crash replay, overload bounds, shutdown, schema validation and trace propagation. CI runs Python 3.11/3.12/3.13 checks and dedicated service integration tests. See [benchmarks/README.md](benchmarks/README.md) for original-environment setup and every test profile.
+Tests cover failed commits, out-of-order completion, numeric gaps, malformed input, output/DLQ failure, async/sync/bulk/aggregate workers, concurrency, lease renewal, crash replay, overload bounds, shutdown, schema validation and trace propagation. CI runs Python 3.11–3.15 checks and dedicated service integration tests on 3.12/3.15. See [benchmarks/README.md](benchmarks/README.md) for original-environment setup and every test profile.
 
 ### Reliability follow-up: replay ledger and replicas
 

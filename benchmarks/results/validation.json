@@ -153,5 +153,34 @@
       "passed": 1,
       "duration_sec": 0.78
     }
+  },
+  "python315_follow_up": {
+    "python": "3.15.0 final",
+    "unit_passed": 170,
+    "unit_live_skips": 19,
+    "full_suite_passed": 189,
+    "full_suite_duration_sec": 139.19,
+    "full_suite_skipped": 0,
+    "pip_check": "passed",
+    "wheel_sdist_build": "passed",
+    "clean_wheel_http_smoke": "passed without tracing extras",
+    "single_execute_example": "one execution, four skips",
+    "artifact": "python315_validation.json",
+    "horizontal_recovery": "horizontal_recovery_python315.json",
+    "performance_measurements": "Historical Python 3.12 data unchanged; no Python-version throughput comparison",
+    "ci": {
+      "revision": "4a4f821887bf8723c24c843ecbd7481601a9b3ef",
+      "run_url": "https://github.com/bogdancstrike/qf-framework-fastapi/actions/runs/38169673414",
+      "status": "passed",
+      "jobs": [
+        "Python 3.11 unit/build",
+        "Python 3.12 unit/build",
+        "Python 3.13 unit/build",
+        "Python 3.14 unit/build",
+        "Python 3.15 unit/build",
+        "Python 3.12 live-service integration",
+        "Python 3.15 live-service integration"
+      ]
+    }
   }
 }
