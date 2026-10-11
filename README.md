@@ -393,7 +393,7 @@ One original trial reached the 60-second deadline and is excluded from successfu
 <!-- SCALE_COMPARISON_START -->
 ## Processing 1,000 versus 100,000 messages
 
-In progress: 8 of 24 planned trials recorded. All 100,000-message numbers are preliminary until three repetitions per engine/workload finish.
+In progress: 15 of 24 planned trials recorded. All 100,000-message numbers are preliminary until three repetitions per engine/workload finish.
 
 Same four partitions, eight worker jobs and three repetitions per engine/workload. The comparator is the **original ACK-gated harness variant**; it changes single-output waiting without repairing the original's other reliability defects. Output time measures the complete input burst to final observed output. Throughput is messages/second; higher is better. Time is seconds; lower is better.
 
@@ -402,9 +402,9 @@ Same four partitions, eight worker jobs and three repetitions per engine/workloa
 | Identity | 1,000 | 3.32 | 0.72 | 301.30 | 1,397.27 | 4.64× | 3/3 | 3/3 |
 | Identity | 100,000 | 144.23 | 72.34 | 693.33 | 1,382.42 | 1.99× | 3/3 | 3/3 |
 | 5 ms I/O / message | 1,000 | 3.36 | 0.75 | 297.69 | 1,331.21 | 4.47× | 3/3 | 3/3 |
-| 5 ms I/O / message | 100,000 | 375.49 | 74.59 | 266.32 | 1,340.70 | 5.03× | 1/1 | 1/1 |
+| 5 ms I/O / message | 100,000 | 376.17 | 74.92 | 265.84 | 1,334.74 | 5.02× | 3/3 | 3/3 |
 | 32-record bulk | 1,000 | 0.58 | 0.06 | 1,712.00 | 15,990.23 | 9.34× | 3/3 | 3/3 |
-| 32-record bulk | 100,000 | — | — | — | — | — | 0/0 | 0/0 |
+| 32-record bulk | 100,000 | 47.92 | 6.18 | 2,086.77 | 16,196.72 | 7.76× | 1/1 | 2/2 |
 | 10% transient retry | 1,000 | 3.13 | 0.72 | 319.20 | 1,388.38 | 4.35× | 3/3 | 3/3 |
 | 10% transient retry | 100,000 | — | — | — | — | — | 0/0 | 0/0 |
 
@@ -419,9 +419,9 @@ This separately waits until the broker reports source offsets committed through 
 | Identity | 1,000 | 3.34 | 0.73 | 299.36 | 1,374.06 |
 | Identity | 100,000 | 144.25 | 72.37 | 693.23 | 1,381.81 |
 | 5 ms I/O / message | 1,000 | 3.40 | 0.77 | 293.99 | 1,294.92 |
-| 5 ms I/O / message | 100,000 | 375.51 | 74.61 | 266.30 | 1,340.31 |
+| 5 ms I/O / message | 100,000 | 376.21 | 74.92 | 265.81 | 1,334.74 |
 | 32-record bulk | 1,000 | 0.61 | 0.07 | 1,651.10 | 14,313.64 |
-| 32-record bulk | 100,000 | — | — | — | — |
+| 32-record bulk | 100,000 | 47.94 | 6.18 | 2,085.83 | 16,195.02 |
 | 10% transient retry | 1,000 | 3.13 | 0.73 | 319.15 | 1,374.37 |
 | 10% transient retry | 100,000 | — | — | — | — |
 <!-- SCALE_COMPARISON_END -->
@@ -471,6 +471,8 @@ QF_INTEGRATION=1 QF_CHAOS=1 python -m pytest tests/test_chaos.py -v
 python benchmarks/compare_pipelines.py --messages 1000 --repeats 3
 python benchmarks/compare_http.py --requests 1000 --repeats 3
 ```
+
+The complete local validation snapshot passed **132 tests**, including Kafka/Redis, 10,000-record stress, SIGKILL recovery, broker outage and real Jaeger checks. The default profile runs 120 unit/regression tests and skips 12 opt-in live tests; see [validation evidence](benchmarks/results/validation.json).
 
 Tests cover failed commits, out-of-order completion, numeric gaps, malformed input, output/DLQ failure, async/sync/bulk/aggregate workers, concurrency, lease renewal, crash replay, overload bounds, shutdown, schema validation and trace propagation. CI runs Python 3.11/3.12/3.13 checks and dedicated service integration tests. See [benchmarks/README.md](benchmarks/README.md) for original-environment setup and every test profile.
 

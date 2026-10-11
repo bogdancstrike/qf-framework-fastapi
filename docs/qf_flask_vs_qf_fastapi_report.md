@@ -30,6 +30,13 @@ Each value is a three-run median with four Kafka partitions and eight worker job
 | Can operators follow an item through the pipeline? | Real Jaeger query verified 13 linked spans in four services with one trace ID | HTTP-to-worker fanout/join investigation has an executable observability proof |
 | Is this production resilience certification? | Single broker/Redis tests; no multi-node failover, Redis data loss or long soak | Deployment-specific acceptance tests remain required |
 
+### Suggested migration gates
+
+1. Replay representative input into isolated topics and outputs in a separate environment; verify business results and stable IDs before enabling real side effects.
+2. Set throughput and tail-latency targets using production payloads and downstream services. Validate the deployment's broker/Redis failover and data-loss boundary.
+3. Prepare DLQ consumers for diagnostic envelopes and make downstream business effects idempotent. Stop/drain the old deployment before a controlled consumer-group cutover; verify committed offsets and rollback behavior.
+4. Monitor readiness, lag, retry/DLQ rates and traces during rollout. Treat the remaining production acceptance tests as release gates, not as covered by the local benchmark.
+
 ### Larger validation: 100,000 messages
 
 The matched 100,000-message comparison is running with the same four workloads, four partitions and eight-worker concurrency, using `original_ack` and `async`, three repetitions each. Results will appear in `pipelines_100k.json` and a dedicated section below. **The 1,000-message ratios are not yet claims about 100,000 messages.** The driver now records whether incomplete runs stalled on output or source commits; deadlines and failed-trial counts will be reported explicitly.
@@ -112,7 +119,7 @@ The new sync path is close to native async for trivial work and bulk on this hos
 <!-- SCALE_COMPARISON_START -->
 ## Processing 1,000 versus 100,000 messages
 
-In progress: 8 of 24 planned trials recorded. All 100,000-message numbers are preliminary until three repetitions per engine/workload finish.
+In progress: 15 of 24 planned trials recorded. All 100,000-message numbers are preliminary until three repetitions per engine/workload finish.
 
 Same four partitions, eight worker jobs and three repetitions per engine/workload. The comparator is the **original ACK-gated harness variant**; it changes single-output waiting without repairing the original's other reliability defects. Output time measures the complete input burst to final observed output. Throughput is messages/second; higher is better. Time is seconds; lower is better.
 
@@ -121,9 +128,9 @@ Same four partitions, eight worker jobs and three repetitions per engine/workloa
 | Identity | 1,000 | 3.32 | 0.72 | 301.30 | 1,397.27 | 4.64× | 3/3 | 3/3 |
 | Identity | 100,000 | 144.23 | 72.34 | 693.33 | 1,382.42 | 1.99× | 3/3 | 3/3 |
 | 5 ms I/O / message | 1,000 | 3.36 | 0.75 | 297.69 | 1,331.21 | 4.47× | 3/3 | 3/3 |
-| 5 ms I/O / message | 100,000 | 375.49 | 74.59 | 266.32 | 1,340.70 | 5.03× | 1/1 | 1/1 |
+| 5 ms I/O / message | 100,000 | 376.17 | 74.92 | 265.84 | 1,334.74 | 5.02× | 3/3 | 3/3 |
 | 32-record bulk | 1,000 | 0.58 | 0.06 | 1,712.00 | 15,990.23 | 9.34× | 3/3 | 3/3 |
-| 32-record bulk | 100,000 | — | — | — | — | — | 0/0 | 0/0 |
+| 32-record bulk | 100,000 | 47.92 | 6.18 | 2,086.77 | 16,196.72 | 7.76× | 1/1 | 2/2 |
 | 10% transient retry | 1,000 | 3.13 | 0.72 | 319.20 | 1,388.38 | 4.35× | 3/3 | 3/3 |
 | 10% transient retry | 100,000 | — | — | — | — | — | 0/0 | 0/0 |
 
@@ -138,9 +145,9 @@ This separately waits until the broker reports source offsets committed through 
 | Identity | 1,000 | 3.34 | 0.73 | 299.36 | 1,374.06 |
 | Identity | 100,000 | 144.25 | 72.37 | 693.23 | 1,381.81 |
 | 5 ms I/O / message | 1,000 | 3.40 | 0.77 | 293.99 | 1,294.92 |
-| 5 ms I/O / message | 100,000 | 375.51 | 74.61 | 266.30 | 1,340.31 |
+| 5 ms I/O / message | 100,000 | 376.21 | 74.92 | 265.81 | 1,334.74 |
 | 32-record bulk | 1,000 | 0.61 | 0.07 | 1,651.10 | 14,313.64 |
-| 32-record bulk | 100,000 | — | — | — | — |
+| 32-record bulk | 100,000 | 47.94 | 6.18 | 2,085.83 | 16,195.02 |
 | 10% transient retry | 1,000 | 3.13 | 0.73 | 319.15 | 1,374.37 |
 | 10% transient retry | 100,000 | — | — | — | — |
 
@@ -149,9 +156,12 @@ This separately waits until the broker reports source offsets committed through 
 | Workload | 1,000-message ratio | 100,000-message ratio | Interpretation |
 | --- | --- | --- | --- |
 | Identity | 4.64× | 1.99× | Async remains faster; advantage is smaller at scale |
-| 5 ms I/O / message | 4.47× | 5.03× | Preliminary; repetitions still running |
-| 32-record bulk | 9.34× | — | Pending paired successful trials |
+| 5 ms I/O / message | 4.47× | 5.02× | Small-test advantage retained or increased |
+| 32-record bulk | 9.34× | 7.76× | Preliminary; repetitions still running |
 | 10% transient retry | 4.35× | — | Pending paired successful trials |
+
+Identity's relative gain falls because original throughput rises from 301 to 693 msg/s, while async stays near 1,397 to 1,382 msg/s. A smaller ratio therefore does not mean async throughput collapsed; the original benefits more from the larger burst.
+
 
 ### 100,000-message latency and process resources
 
@@ -159,16 +169,16 @@ This separately waits until the broker reports source offsets committed through 
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Identity | original_ack | 3/3 | 68,160.79 | 129,493.29 | 137,688.09 | 89.95 | 63.74 |
 | Identity | async | 3/3 | 34,673.04 | 65,902.93 | 68,650.39 | 15.65 | 123.23 |
-| 5 ms I/O / message | original_ack | 1/1 | 195,005.14 | 354,240.10 | 368,964.59 | 56.11 | 64.50 |
-| 5 ms I/O / message | async | 1/1 | 35,714.78 | 68,005.76 | 70,897.75 | 15.85 | 124.53 |
-| 32-record bulk | original_ack | 0/0 | — | — | — | — | — |
-| 32-record bulk | async | 0/0 | — | — | — | — | — |
+| 5 ms I/O / message | original_ack | 3/3 | 195,005.14 | 354,668.16 | 369,538.09 | 56.11 | 64.61 |
+| 5 ms I/O / message | async | 3/3 | 36,030.95 | 68,318.88 | 71,232.12 | 15.85 | 124.53 |
+| 32-record bulk | original_ack | 1/1 | 7,282.91 | 41,810.05 | 43,972.33 | 10.59 | 66.21 |
+| 32-record bulk | async | 2/2 | 1,485.08 | 2,696.14 | 2,999.15 | 3.33 | 87.27 |
 | 10% transient retry | original_ack | 0/0 | — | — | — | — | — |
 | 10% transient retry | async | 0/0 | — | — | — | — | — |
 
 ### Completion and resilience observations
 
-8 completed 100,000-message trials and 0 incomplete attempts are currently recorded. Completed trials contain 0 missing outputs, 0 immediate duplicates and 0 DLQ records. This is happy-path stress evidence; it does not replace the separate crash/outage tests.
+15 completed 100,000-message trials and 0 incomplete attempts are currently recorded. Completed trials contain 0 missing outputs, 0 immediate duplicates and 0 DLQ records. This is happy-path stress evidence; it does not replace the separate crash/outage tests.
 
 The large-run driver uses incremental unique-ID tracking to avoid repeated large set reconstruction. The payload, workers and measurement boundaries are unchanged; it also emits progress and records explicit output/source-commit stall diagnostics. Per-phase overall deadline is 900 seconds; no-progress deadline is 60 seconds. Execution order alternates across repetitions. Warmup is 128 records, excluded from measurement. Single broker, loopback transport and finite bursts remain the main experimental limits.
 
@@ -247,7 +257,7 @@ Further fixes include policy wrappers applied outside worker registration, unsaf
 
 ## Live-service validation and recovery contract
 
-The final validation record is in [validation.json](../benchmarks/results/validation.json). Tests include:
+The complete local suite passed **132 tests**: 120 unit/regression checks and 12 live-service checks, including 10,000-record stress. GitHub CI also passed Python 3.11/3.12/3.13 and the dedicated service-integration job. The final validation record is in [validation.json](../benchmarks/results/validation.json). Tests include:
 
 | Test family | Executed behavior | Result / scope |
 |---|---|---|

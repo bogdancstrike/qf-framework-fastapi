@@ -149,6 +149,21 @@ def render(small, large, details=False):
             ["Workload", "1,000-message ratio", "100,000-message ratio", "Interpretation"],
             ratio_rows,
         )
+        if (
+            len(data[100000]["noop", "original_ack"]) == 3
+            and len(data[100000]["noop", "async"]) == 3
+        ):
+            small_original = median(data[1000]["noop", "original_ack"], "messages_per_sec")
+            large_original = median(data[100000]["noop", "original_ack"], "messages_per_sec")
+            small_async = median(data[1000]["noop", "async"], "messages_per_sec")
+            large_async = median(data[100000]["noop", "async"], "messages_per_sec")
+            text += (
+                f"\n\nIdentity's relative gain falls because original throughput rises from "
+                f"{small_original:,.0f} to {large_original:,.0f} msg/s, while async stays near "
+                f"{small_async:,.0f} to {large_async:,.0f} msg/s. A smaller ratio therefore does "
+                "not mean async throughput collapsed; the original benefits more from the larger burst.\n"
+            )
+
         text += "\n\n### 100,000-message latency and process resources\n\n"
         detail_rows = []
         for (workload, engine), trials in data[100000].items():
