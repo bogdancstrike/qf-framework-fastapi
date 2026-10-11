@@ -1,4 +1,5 @@
 """Query real Jaeger storage after crossing four independent worker processes."""
+
 import asyncio
 import json
 import os
@@ -13,7 +14,12 @@ import pytest
 from aiokafka import AIOKafkaConsumer
 from aiokafka.admin import AIOKafkaAdminClient, NewTopic
 
-pytestmark = [pytest.mark.integration, pytest.mark.skipif(os.getenv("QF_JAEGER") != "1", reason="QF_JAEGER=1 requires Kafka, Redis and Jaeger")]
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        os.getenv("QF_JAEGER") != "1", reason="QF_JAEGER=1 requires Kafka, Redis and Jaeger"
+    ),
+]
 
 
 async def test_otlp_trace_is_linked_through_http_fanout_and_join(tmp_path):
@@ -24,7 +30,12 @@ async def test_otlp_trace_is_linked_through_http_fanout_and_join(tmp_path):
     jaeger = os.getenv("QF_TEST_JAEGER", "http://localhost:26686")
     otlp = os.getenv("QF_TEST_OTLP", "http://localhost:24317")
     admin = AIOKafkaAdminClient(bootstrap_servers=bootstrap)
-    output = AIOKafkaConsumer(topics[-1], bootstrap_servers=bootstrap, auto_offset_reset="earliest", enable_auto_commit=False)
+    output = AIOKafkaConsumer(
+        topics[-1],
+        bootstrap_servers=bootstrap,
+        auto_offset_reset="earliest",
+        enable_auto_commit=False,
+    )
     processes, logs = [], []
     with socket.socket() as server:
         server.bind(("127.0.0.1", 0))
@@ -36,22 +47,38 @@ async def test_otlp_trace_is_linked_through_http_fanout_and_join(tmp_path):
         for role in ["a", "b", "merge", "ingress"]:
             log = (tmp_path / f"{role}.log").open("w")
             logs.append(log)
-            command = [sys.executable, str(root / "benchmarks/tracing_worker.py"),
-                "--role", role, "--prefix", prefix, "--port", str(port), "--bootstrap", bootstrap, "--otlp", otlp]
+            command = [
+                sys.executable,
+                str(root / "benchmarks/tracing_worker.py"),
+                "--role",
+                role,
+                "--prefix",
+                prefix,
+                "--port",
+                str(port),
+                "--bootstrap",
+                bootstrap,
+                "--otlp",
+                otlp,
+            ]
             processes.append(subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT))
         async with httpx.AsyncClient(timeout=5) as client:
             async with asyncio.timeout(30):
                 while True:
                     for process in processes:
-                        assert process.poll() is None, [p.read_text() for p in tmp_path.glob("*.log")]
+                        assert process.poll() is None, [
+                            p.read_text() for p in tmp_path.glob("*.log")
+                        ]
                     try:
                         response = await client.get(f"http://localhost:{port}/health/ready")
                         if response.status_code == 200:
                             break
                     except httpx.HTTPError:
                         pass
-                    await asyncio.sleep(.1)
-            response = await client.post(f"http://localhost:{port}/publish", json={"id": prefix, "text": "linked trace"})
+                    await asyncio.sleep(0.1)
+            response = await client.post(
+                f"http://localhost:{port}/publish", json={"id": prefix, "text": "linked trace"}
+            )
             response.raise_for_status()
             trace_id = response.json()["trace_id"]
             async with asyncio.timeout(30):
@@ -74,7 +101,7 @@ async def test_otlp_trace_is_linked_through_http_fanout_and_join(tmp_path):
                     data = response.json().get("data", []) if response.status_code == 200 else []
                     if data and len(data[0]["spans"]) >= 10:
                         break
-                    await asyncio.sleep(.2)
+                    await asyncio.sleep(0.2)
             trace_data = data[0]
             spans = trace_data["spans"]
             assert {span["traceID"] for span in spans} == {trace_id}
@@ -92,11 +119,21 @@ async def test_otlp_trace_is_linked_through_http_fanout_and_join(tmp_path):
             assert len(links) == len(spans) - 1
             path = root / "benchmarks/results/jaeger_trace.json"
             path.write_text(json.dumps(trace_data, indent=2))
-            (root / "benchmarks/results/jaeger_verification.json").write_text(json.dumps({
-                "trace_id": trace_id, "spans": len(spans), "services": sorted(services),
-                "parent_child_links": len(links), "root": roots[0]["operationName"],
-                "ui_url": f"{jaeger}/trace/{trace_id}", "final_kafka_trace_id": trace_id,
-                "operations": [span["operationName"] for span in spans]}, indent=2))
+            (root / "benchmarks/results/jaeger_verification.json").write_text(
+                json.dumps(
+                    {
+                        "trace_id": trace_id,
+                        "spans": len(spans),
+                        "services": sorted(services),
+                        "parent_child_links": len(links),
+                        "root": roots[0]["operationName"],
+                        "ui_url": f"{jaeger}/trace/{trace_id}",
+                        "final_kafka_trace_id": trace_id,
+                        "operations": [span["operationName"] for span in spans],
+                    },
+                    indent=2,
+                )
+            )
     finally:
         for process in processes:
             if process.poll() is None:
