@@ -1,0 +1,12 @@
+{
+  "source": "/home/bogdan/workspace/templates/framework_qf/qf_framework/src/framework/etl/framework_etl.py",
+  "method": "AST-selected original code; injected failed transport boundary; real Redis Lua",
+  "defects_reproduced": {
+    "failed_commit_candidate_lost": true,
+    "numeric_offset_gap_stalls": true,
+    "later_parse_error_can_commit_earlier_unfinished_record": true,
+    "failed_default_dlq_send_treated_as_success": true,
+    "single_output_success_before_ack": true,
+    "aggregation_duplicate_ready_without_claim": true
+  }
+}

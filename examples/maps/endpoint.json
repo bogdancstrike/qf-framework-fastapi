@@ -1,0 +1,8 @@
+{
+  "namespaces": [{"name": "examples", "description": "Native async and legacy sync handlers"}],
+  "models": {"Echo": {"text": {"type": "string", "args": {"required": true, "description": "Text to echo"}}}},
+  "endpoints": [
+    {"namespace": "examples", "operation_name": "echo", "model_name": "Echo", "request_method": ["POST"], "api_url": "/examples/echo/<int:item_id>", "exec_method": {"module_name": "examples.handlers", "method_name": "echo"}},
+    {"namespace": "examples", "operation_name": "legacy_echo", "model_name": "Echo", "request_method": ["POST"], "exec_method": {"module_name": "examples.handlers", "method_name": "legacy_echo"}}
+  ]
+}

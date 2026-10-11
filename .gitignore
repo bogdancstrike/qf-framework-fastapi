@@ -1,0 +1,53 @@
+# Python and environments
+__pycache__/
+*.py[cod]
+.Python
+.venv/
+venv/
+env/
+.tox/
+.nox/
+
+# Packaging
+dist/
+build/
+*.egg-info/
+*.egg
+.eggs/
+
+# Secrets and local environment files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# Tests, lint and profiling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pytype/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.prof
+*.lprof
+
+# Logs and local runtime state
+*.log
+nohup.out
+*.pid
+*.pid.lock
+instance/
+
+# Editors and OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+*~
+*.swp
