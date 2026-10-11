@@ -221,7 +221,13 @@ class KafkaRuntime:
                     admission.abandon(generation)
                 if not future.cancelled():
                     error = future.exception()
-                    if error is not None and not isinstance(error, StaleAssignment):
+                    # Stale work is harmless only after its partition was
+                    # actually revoked/replaced. Lost Redis ownership while
+                    # still assigned otherwise leaves an unfinished offset gap
+                    # forever; fail visibly so supervision can replay it.
+                    if error is not None and (
+                        not isinstance(error, StaleAssignment) or self.valid(tp, partition)
+                    ):
                         self.error = error
                         self.ready = False
                         self.metrics.ready.set(0)

@@ -94,7 +94,7 @@ class Processor:
     @staticmethod
     def check(valid):
         if not valid():
-            raise StaleAssignment("Partition assignment was revoked")
+            raise StaleAssignment("Partition assignment or processing lease is no longer owned")
 
     async def publish(self, spec, result, records, valid, source_payload=None):
         if result is None:

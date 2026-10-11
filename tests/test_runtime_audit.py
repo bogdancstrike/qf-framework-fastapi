@@ -135,6 +135,46 @@ async def test_running_worker_configuration_is_a_snapshot(settings, spec, fake_m
         await runtime.stop()
 
 
+async def test_lost_processing_lease_fails_runtime_instead_of_stalling_partition(
+    settings, spec, fake_module
+):
+    settings.idempotency_enabled = True
+    settings.aggregate_lease_sec = 3
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = AggregationStore(settings, redis)
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def work(message, *_):
+        entered.set()
+        await release.wait()
+        return message
+
+    consumer, producer = Consumer([record()]), Producer()
+    runtime = KafkaRuntime(
+        settings,
+        consumer=consumer,
+        producer=producer,
+        aggregation=store,
+        workers=[replace(spec, fn=work)],
+    )
+    await runtime.start()
+    try:
+        await entered.wait()
+        ledger = replace(spec, name="dedup:" + spec.name)
+        keys = store.keys(ledger, "source:in:0:0")
+        assert await redis.delete(keys[1]) == 1
+        await asyncio.sleep(1.15)  # Heartbeat detects lost ownership.
+        release.set()
+        await eventually(lambda: not runtime.active[spec.name])
+        assert runtime.error is not None, "An owned partition must not silently retain a failed gap"
+        assert not runtime.ready
+        assert not producer.sent and not consumer.commits
+    finally:
+        release.set()
+        await runtime.stop()
+        await redis.aclose()
+
+
 async def test_ready_join_parts_live_at_least_as_long_as_renewed_lease(settings, spec):
     settings.aggregate_lease_sec = 3
     redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
