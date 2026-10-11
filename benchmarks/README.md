@@ -1,5 +1,16 @@
 # Tests and reproducible benchmarks
 
+The [runtime audit](../docs/RuntimeAudit.md) adds five repeated 5,000-message
+five-worker reliability trials. Run `QF_INTEGRATION=1 python -m pytest
+tests/test_pipeline_reliability.py -v`; these verify delivery/commits with retries,
+not equivalent Flask throughput. Raw results are kept per interpreter.
+
+ACK bookkeeping is measured separately with
+`python benchmarks/profile_ack_publisher.py --output /tmp/ack-cost.json`.
+Use `--profile /tmp/ack-cost.prof --repeats 1` for cProfile diagnosis, then measure
+again without profiling. Immediate in-memory receipts intentionally isolate CPU
+overhead; this microbenchmark excludes Kafka, Redis, handlers and source commits.
+
 Install `pip install -e '.[dev,tracing]'`. Install the original framework's dependencies and gevent in its separate `.venv`; both distributions use `framework` imports. Scripts launch each implementation in an isolated process and create/delete UUID-scoped Kafka topics. Run benchmarks sequentially, without chaos tests or competing load.
 
 ```bash

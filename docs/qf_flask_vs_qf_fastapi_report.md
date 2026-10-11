@@ -266,7 +266,7 @@ Further fixes include policy wrappers applied outside worker registration, unsaf
 
 ## Live-service validation and recovery contract
 
-At benchmark completion, the local suite passed **132 tests**: 120 unit/regression checks and 12 live-service checks, including 10,000-record stress. GitHub CI also passed Python 3.11/3.12/3.13 and the dedicated service-integration job. The historical validation record is in [validation.json](../benchmarks/results/validation.json). The documentation follow-up passed the expanded **133-test** live suite, adding the runnable HTTP/fanout/Redis-join application and CLI check. A focused follow-up also verifies repeat provisioning, historical-output isolation, schema errors and the documented retry/DLQ example. The reliability/replica follow-up now passes **189 tests** (170 unit/regression and 19 live), in 132.83 seconds locally on Python 3.12. Its new measurements are separate from these historical benchmark snapshots. Tests include:
+At benchmark completion, the local suite passed **132 tests**: 120 unit/regression checks and 12 live-service checks, including 10,000-record stress. GitHub CI also passed Python 3.11/3.12/3.13 and the dedicated service-integration job. The historical validation record is in [validation.json](../benchmarks/results/validation.json). The documentation follow-up passed the expanded **133-test** live suite, adding the runnable HTTP/fanout/Redis-join application and CLI check. A focused follow-up also verifies repeat provisioning, historical-output isolation, schema errors and the documented retry/DLQ example. The earlier reliability/replica follow-up passed **189 tests** (170 unit/regression and 19 live), in 132.83 seconds locally on Python 3.12. Its new measurements are separate from these historical benchmark snapshots. Tests include:
 
 | Test family | Executed behavior | Result / scope |
 |---|---|---|
@@ -297,9 +297,9 @@ Important remaining boundaries:
 
 ## OTLP evidence in Jaeger
 
-Latest archived verification: trace **`b90e1ac25a4ef2760864566b2bbefee9`**, **13 spans**, **12 parent-child references**, services `qf-otlp-a, qf-otlp-b, qf-otlp-ingress, qf-otlp-merge`. Every returned span shared the HTTP trace ID; all references resolved within that trace; one `POST /publish` root existed; final Kafka output carried the same trace ID.
+Latest archived verification: trace **`f1ba61aeff529eb3d578797abf7dc5f5`**, **13 spans**, **12 parent-child references**, services `qf-otlp-a, qf-otlp-b, qf-otlp-ingress, qf-otlp-merge`. Every returned span shared the HTTP trace ID; all references resolved within that trace; one `POST /publish` root existed; final Kafka output carried the same trace ID.
 
-[Open the local Jaeger trace](http://localhost:26686/trace/b90e1ac25a4ef2760864566b2bbefee9) while the current development container is running. [Verification JSON](../benchmarks/results/jaeger_verification.json) and [complete Jaeger response](../benchmarks/results/jaeger_trace.json) preserve the proof after ephemeral Jaeger storage resets.
+[Open the local Jaeger trace](http://localhost:26686/trace/f1ba61aeff529eb3d578797abf7dc5f5) while the current development container is running. [Verification JSON](../benchmarks/results/jaeger_verification.json) and [complete Jaeger response](../benchmarks/results/jaeger_trace.json) preserve the proof after ephemeral Jaeger storage resets.
 
 Fanout branches share context. The aggregate handler is parented to the completing arrival; prior parts remain visible in the trace but their contexts are not stored as explicit multi-parent Redis join links. Distinct-root inputs are not merged into one trace ID. Bulk outputs preserving source IDs retain each source trace through a producer span linked to the batch; changed/new IDs fall back to the batch trace. Unit tests cover distinct trace IDs in bulk and DLQ. Outbound HTTP/manual publishing needs instrumentation or explicit header injection; see [Tracing.md](Tracing.md).
 
@@ -312,6 +312,7 @@ Physical source metrics, excluding tests/benchmarks/docs and including retained 
 | Original | 29 | 5018 | 250 | (1798, 'etl/framework_etl.py') |
 | FastAPI, historical comparison | 35 | 3462 | 233 | (408, 'etl/framework_etl.py') |
 | FastAPI, hardened runtime | 36 | 3745 | 247 | (408, 'etl/framework_etl.py') |
+| FastAPI, runtime audit | 36 | 3999 | 252 | (448, 'etl/framework_etl.py') |
 
 The hardened row includes the shared ACK publisher and audited utilities; the earlier row is preserved as its historical snapshot. These are descriptive counts, not a complexity or quality score. The original includes commented/dead sections; fewer lines do not establish correctness. The new runtime separates scheduling, commit coordination, processing, Redis aggregation, idempotency, settings, API compilation and tracing. This makes failure contracts easier to inspect and individual dependencies replaceable in tests. The explicit runtime dependency injection used in unit tests improves reviewability without requiring a service container.
 
@@ -362,15 +363,25 @@ A deployment bug was also fixed: terminal ETL errors now fail `/health/live` as 
 
 The utility audit adds regression coverage for fast SingleExecute ownership loss and fractional leases, stale circuit completions, async/sync client mismatch, cancelled lease cleanup, Kafka/Redis resource ownership, finite JSON serialization and short/extended APDU and byte-length boundaries. `framework.instances` is an empty namespace in both frameworks; application resources belong in lifespan/app state. See [Utilities](Utilities.md) and the expanded [example tutorial](../examples/README.md).
 
-Current validation: **189 passed**, zero skips in the full live profile, including 10,000-message stress, dedicated broker pause, process failures and refreshed real Jaeger evidence. Default tests pass 170 with 19 opt-in skips. The Starlette TestClient/httpx deprecation warning remains. [Twenty proposed features](Roadmap.md) are recommendations awaiting user selection, not implemented capabilities.
+Earlier hardening checkpoint: **189 passed**, zero skips in the full live profile, including 10,000-message stress, dedicated broker pause, process failures and refreshed real Jaeger evidence. That checkpoint had 170 default tests and 19 opt-in skips; the audit below expands this to 221 total tests. The Starlette TestClient/httpx deprecation warning remains. [Twenty proposed features](Roadmap.md) are recommendations awaiting user selection, not implemented capabilities.
 
 ## Python 3.15.0 compatibility follow-up
 
-Python 3.15.0 final passed **170 unit/regression tests** and the complete **189-test live profile** with zero skips/failures, including Kafka/Redis, replica kills/replacement, committed partial joins, excess replicas, broker outage, 10,000-record stress and real Jaeger. Full local elapsed time was 139.19 seconds; that duration includes synchronization/timeouts and is not a throughput benchmark. Dependency installation and `pip check` passed without framework runtime changes or unsupported ABI/pure-Python workarounds. Wheel/sdist builds, a clean-wheel HTTP smoke without tracing SDK extras and the competing-call SingleExecute example passed.
+The initial Python 3.15.0 check passed **170 unit/regression tests** and the complete **189-test live profile** with zero skips/failures, including Kafka/Redis, replica kills/replacement, committed partial joins, excess replicas, broker outage, 10,000-record stress and real Jaeger. Full local elapsed time was 139.19 seconds; that duration includes synchronization/timeouts and is not a throughput benchmark. Dependency installation and `pip check` passed without framework runtime changes or unsupported ABI/pure-Python workarounds. Wheel/sdist builds, a clean-wheel HTTP smoke without tracing SDK extras and the competing-call SingleExecute example passed.
 
 CI now checks unit/build behavior on Python **3.11–3.15**, with live-service jobs on **3.12 and 3.15**. The tested local build is standard GIL CPython on Linux x86_64; free-threaded/JIT and other platforms were not validated. Exact versions, source archive hash and limits are in [Python compatibility](PythonCompatibility.md), [validation JSON](../benchmarks/results/python315_validation.json), [dependency freeze](../benchmarks/results/python315_dependencies.txt) and [3.15 replica evidence](../benchmarks/results/horizontal_recovery_python315.json).
 
 The historical 1k/100k Flask comparisons and 10k reliability/join benchmarks remain **Python 3.12.3 measurements**. No Python 3.15 performance multiplier is inferred from compatibility tests.
+
+## Runtime audit and repeated five-stage reliability
+
+The later audit fixes stale concurrent circuit completions, cancellation-stuck probes, active-join retention, failed-join circuit outcomes, silently conflicting injected workers, configuration precedence/validation and independent lifecycle cleanup. Lost Redis ownership under a still-assigned Kafka partition now fails visibly for supervised replay instead of silently stranding an unfinished offset. There are 27 focused audit regressions. [Extension contracts](Extending.md) document ownership and state-machine invariants.
+
+The final full suite passed **221 tests** on Python 3.12 (184.22 s) and 3.15 (186.47 s), zero skips/failures: 197 unit/regression and 24 live tests. Both interpreters passed **five independent 5,000-message trials through five workers**: **10/10 successful trials**, **50,000 inputs**, **250,000 successful message-stage executions** and **50,000 final outputs**, with zero observed missing, duplicate or unexpected DLQ output. All 20 source partitions committed in each trial.
+
+Every trial injected transient handler failures at every stage (two failures before success) and known pre-enqueue producer failures. Configurations cover replay-ledger off/on, a bulk third stage and graceful full-runtime replacement during processing. Five stages share one process; separate existing tests cover multi-process SIGKILL/scaling. [3.12 raw trials](../benchmarks/results/pipeline_reliability.json), [3.15 raw trials](../benchmarks/results/pipeline_reliability_python315.json), [audit detail](RuntimeAudit.md).
+
+Isolated ACK bookkeeping (100,000 receipts, batches of 100, five trials/version) reduced median CPU from **0.351 s to 0.248 s** (**29.5% less CPU**, 1.418× for this microbenchmark). It excludes Kafka/Redis, handlers and commits; it does not establish an end-to-end pipeline speedup. Raw [before](../benchmarks/results/ack_bookkeeping_before.json) and [after](../benchmarks/results/ack_bookkeeping_after.json) retain all five unprofiled trials and source hashes. This optimization removes redundant metric lookups in bulk jobs. Historical Flask/FastAPI throughput ratios remain tied to their original measured revisions.
 
 ## Reproduction and artifact index
 

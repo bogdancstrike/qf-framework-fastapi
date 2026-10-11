@@ -4,6 +4,14 @@ Status is updated as work is implemented and verified. A checked item means its 
 
 ## Reliability and replica follow-up
 
+- [x] Reproduce and fix stale worker-circuit completions and cancelled half-open probes, including cancellation before task entry.
+- [x] Retain complete join parts beyond active lease lifetime and propagate joined-handler failure to circuit policy.
+- [x] Validate/snapshot explicit WorkerSpecs, correct cross-alias environment precedence and reject nonfinite settings and ambiguous endpoint declarations.
+- [x] Preserve independent tracing/signal cleanup and primary errors through lifecycle failures.
+- [x] Fail visibly on lost Redis processing ownership under a still-assigned partition, preserving source replay instead of silently stalling a gap.
+- [x] Add 27 audit regressions and five repeated real-Kafka 5,000-message/five-worker scenarios with retries and restart.
+- [x] Document extension points, state-machine invariants and resource ownership; profile and reduce repeated ACK metric label lookups.
+
 - [x] Preserve confirmed/pending output and DLQ ACK receipts across retries; reproduce partial fanout, late ACK and bulk DLQ faults.
 - [x] Expose custom/default aggregation through `kafka_handler`; reject conflicting bulk joins and missing/invalid correlation keys.
 - [x] Make Redis claim/completion retries token-stable and replay-safe; pipeline source-ledger operations and use one heartbeat per job.

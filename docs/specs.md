@@ -48,6 +48,11 @@ Optional Redis source-coordinate deduplication uses renewable claims and complet
 
 ## Hardening and replica acceptance
 
+- Fence circuit state by admission generation, ignore stale completions and release cancelled probes, including tasks cancelled before execution.
+- Preserve complete join parts throughout a valid processing lease and a configured recovery window after expiry; propagate failed joined-handler outcomes to circuit policies.
+- Validate explicit worker injection as strictly as decorators; snapshot mutable configuration at startup. Resolve environment/dotenv aliases by precedence layer and reject nonfinite timeouts.
+- Verify five independent 5,000-message trials through five workers, including transient handler/transport failures, source-ledger off/on, bulk processing and graceful runtime replacement. Assert all IDs at every stage, all intermediate topic counts, all 20 source commits and no unexpected DLQ/duplicates.
+
 - `kafka_handler(aggregator=True)` defaults to correlation field `id`; explicit dotted `aggregate_by` also selects aggregation. Retain the compatibility aggregator decorator. Reject bulk joins and missing/non-scalar/empty correlation keys before unsafe execution.
 - Preserve every known ACK and pending producer receipt across local transport retries. Use the same delivery machinery for output and DLQ. A timeout must not cancel a still-valid send receipt and blindly resend it.
 - Reuse Redis claim tokens across ambiguous transport replies. Completion scripts retain a token-valued receipt so a repeated completion succeeds for its owner. Batch independent ledger scripts and renew owned claims with one job heartbeat.

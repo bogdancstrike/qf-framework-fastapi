@@ -182,5 +182,72 @@
         "Python 3.15 live-service integration"
       ]
     }
+  },
+  "runtime_audit": {
+    "validated_at_utc": "2026-10-11T20:30:17.081327+00:00",
+    "runtime_revision": "8f0e05529ac72d9f234bdf936ed9b0d3c1c4e768",
+    "python312_full_suite": {
+      "passed": 221,
+      "skipped": 0,
+      "duration_sec": 184.22
+    },
+    "python315_full_suite": {
+      "passed": 221,
+      "skipped": 0,
+      "duration_sec": 186.47
+    },
+    "unit_tests": 197,
+    "opt_in_live_tests": 24,
+    "new_audit_regressions": 27,
+    "command": "QF_INTEGRATION=1 QF_CHAOS=1 QF_JAEGER=1 QF_STRESS_MESSAGES=10000 python -m pytest -q",
+    "pipeline": {
+      "trials": 10,
+      "messages_per_trial": 5000,
+      "workers": 5,
+      "input_instances": 50000,
+      "successful_stage_executions": 250000,
+      "final_outputs": 50000,
+      "missing": 0,
+      "duplicates": 0,
+      "dlq": 0,
+      "source_partitions_verified_per_trial": 20,
+      "handler_failure_attempts_recovered": 12174,
+      "pre_enqueue_transport_failures_recovered": 520,
+      "artifacts": [
+        "pipeline_reliability.json",
+        "pipeline_reliability_python315.json"
+      ]
+    },
+    "ack_bookkeeping": {
+      "scope": "ACK bookkeeping only; immediate in-memory receipts; no Kafka/Redis/handler/commit",
+      "before_cpu_sec": 0.3514671020000002,
+      "after_cpu_sec": 0.24794007299999998,
+      "cpu_reduction_percent": 29.45568117496248,
+      "cpu_ratio": 1.4175485944944455,
+      "trials_per_version": 5,
+      "artifacts": [
+        "ack_bookkeeping_before.json",
+        "ack_bookkeeping_after.json"
+      ]
+    },
+    "jaeger_trace_id": "f1ba61aeff529eb3d578797abf7dc5f5",
+    "pip_check": "passed on 3.12 and 3.15",
+    "build": "wheel and sdist passed on 3.12 and 3.15",
+    "original_source_unchanged": true,
+    "clean_python315_wheel_http_smoke": "passed without tracing SDK: readiness/live/metrics/OpenAPI/null-model ping/typed echo",
+    "latest_jaeger_storage_recheck": "13 spans, 12 linked references, same HTTP/Kafka trace ID",
+    "documentation": {
+      "markdown_files": 29,
+      "python_json_blocks": 33,
+      "local_links": 222,
+      "errors": [],
+      "report_copies": "identical after resolving relative links"
+    },
+    "ci": {
+      "revision": "8f0e05529ac72d9f234bdf936ed9b0d3c1c4e768",
+      "run_url": "https://github.com/bogdancstrike/qf-framework-fastapi/actions/runs/38171953565",
+      "status": "passed",
+      "jobs": 7
+    }
   }
 }

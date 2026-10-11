@@ -153,5 +153,21 @@
       "Python 3.12 live-service integration",
       "Python 3.15 live-service integration"
     ]
+  },
+  "runtime_audit_follow_up": {
+    "runtime_revision": "8f0e05529ac72d9f234bdf936ed9b0d3c1c4e768",
+    "full_suite": {
+      "passed": 221,
+      "skipped": 0,
+      "duration_sec": 186.47
+    },
+    "unit_tests": 197,
+    "opt_in_live_tests": 24,
+    "pipeline_trials": 5,
+    "pipeline_inputs": 25000,
+    "pipeline_successful_stage_executions": 125000,
+    "pipeline_artifact": "pipeline_reliability_python315.json",
+    "clean_wheel_http_smoke": "passed without tracing SDK",
+    "evidence": "validation.json: runtime_audit"
   }
 }

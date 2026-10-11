@@ -3,8 +3,8 @@
   "requested_trials": 5,
   "scope": "real Kafka RF1/Redis; five stages in one process; deterministic transient handler and pre-enqueue transport failures",
   "source_sha256": {
-    "etl/framework_etl.py": "4357103d3c1f4ecae9631d8a4985ea88d7132ca3dac6417d490b7e7c9eba37cc",
-    "etl/processing.py": "a55e7314aef33a5c1e8ed9d73889b9b403bd55b312cdf1bda3e93554a3990b6f",
+    "etl/framework_etl.py": "5e552793a181f4e5347a4daa0d4f747d6d8624fc82b1ae915148989f101fab75",
+    "etl/processing.py": "f6a45e03b97404665d6043e15b8ad4f44886098bcecf37626379dfb0c1efc902",
     "etl/policies.py": "2133a4864d07d666e63965b2afd623ee993a91f1b8e46c2383d69344d7c6c84f",
     "redis/aggregation.py": "09578ccc203dabf3298fedda976243edf12097c786cf72de7fcc3553eac66d52",
     "streams/delivery.py": "a8fd63ea3dbc9efd64d0bf09dd0060adcf173c6f6f4c3a36ce6644458466c554"
@@ -17,8 +17,8 @@
       "idempotency_enabled": false,
       "bulk_stage": null,
       "graceful_runtime_restarts": 0,
-      "elapsed_to_final_output_sec_including_startup": 4.074068175999855,
-      "elapsed_through_verification_sec": 7.080209390000164,
+      "elapsed_to_final_output_sec_including_startup": 4.327444651000405,
+      "elapsed_through_verification_sec": 7.331344414000341,
       "processed_unique_per_stage": [
         5000,
         5000,
@@ -36,12 +36,12 @@
       "transport_retries": 52,
       "committed_partitions": 20,
       "topic_counts": {
-        "qf-pipeline-proof-db5ac37daef9-0": 5000,
-        "qf-pipeline-proof-db5ac37daef9-1": 5000,
-        "qf-pipeline-proof-db5ac37daef9-2": 5000,
-        "qf-pipeline-proof-db5ac37daef9-3": 5000,
-        "qf-pipeline-proof-db5ac37daef9-4": 5000,
-        "qf-pipeline-proof-db5ac37daef9-5": 5000
+        "qf-pipeline-proof-3199e6cb53c7-0": 5000,
+        "qf-pipeline-proof-3199e6cb53c7-1": 5000,
+        "qf-pipeline-proof-3199e6cb53c7-2": 5000,
+        "qf-pipeline-proof-3199e6cb53c7-3": 5000,
+        "qf-pipeline-proof-3199e6cb53c7-4": 5000,
+        "qf-pipeline-proof-3199e6cb53c7-5": 5000
       },
       "final_outputs": 5000,
       "missing": 0,
@@ -55,8 +55,8 @@
       "idempotency_enabled": true,
       "bulk_stage": null,
       "graceful_runtime_restarts": 0,
-      "elapsed_to_final_output_sec_including_startup": 7.644825145000141,
-      "elapsed_through_verification_sec": 10.651451718998942,
+      "elapsed_to_final_output_sec_including_startup": 8.480452007999702,
+      "elapsed_through_verification_sec": 11.485340519999227,
       "processed_unique_per_stage": [
         5000,
         5000,
@@ -74,12 +74,12 @@
       "transport_retries": 52,
       "committed_partitions": 20,
       "topic_counts": {
-        "qf-pipeline-proof-f421f85b2aa2-0": 5000,
-        "qf-pipeline-proof-f421f85b2aa2-1": 5000,
-        "qf-pipeline-proof-f421f85b2aa2-2": 5000,
-        "qf-pipeline-proof-f421f85b2aa2-3": 5000,
-        "qf-pipeline-proof-f421f85b2aa2-4": 5000,
-        "qf-pipeline-proof-f421f85b2aa2-5": 5000
+        "qf-pipeline-proof-d5f8d956ca48-0": 5000,
+        "qf-pipeline-proof-d5f8d956ca48-1": 5000,
+        "qf-pipeline-proof-d5f8d956ca48-2": 5000,
+        "qf-pipeline-proof-d5f8d956ca48-3": 5000,
+        "qf-pipeline-proof-d5f8d956ca48-4": 5000,
+        "qf-pipeline-proof-d5f8d956ca48-5": 5000
       },
       "final_outputs": 5000,
       "missing": 0,
@@ -93,8 +93,8 @@
       "idempotency_enabled": false,
       "bulk_stage": null,
       "graceful_runtime_restarts": 0,
-      "elapsed_to_final_output_sec_including_startup": 4.037554886999715,
-      "elapsed_through_verification_sec": 7.042388801000925,
+      "elapsed_to_final_output_sec_including_startup": 4.29254698800105,
+      "elapsed_through_verification_sec": 7.297921307999786,
       "processed_unique_per_stage": [
         5000,
         5000,
@@ -112,12 +112,12 @@
       "transport_retries": 52,
       "committed_partitions": 20,
       "topic_counts": {
-        "qf-pipeline-proof-47eded7f2884-0": 5000,
-        "qf-pipeline-proof-47eded7f2884-1": 5000,
-        "qf-pipeline-proof-47eded7f2884-2": 5000,
-        "qf-pipeline-proof-47eded7f2884-3": 5000,
-        "qf-pipeline-proof-47eded7f2884-4": 5000,
-        "qf-pipeline-proof-47eded7f2884-5": 5000
+        "qf-pipeline-proof-f9809e9afc23-0": 5000,
+        "qf-pipeline-proof-f9809e9afc23-1": 5000,
+        "qf-pipeline-proof-f9809e9afc23-2": 5000,
+        "qf-pipeline-proof-f9809e9afc23-3": 5000,
+        "qf-pipeline-proof-f9809e9afc23-4": 5000,
+        "qf-pipeline-proof-f9809e9afc23-5": 5000
       },
       "final_outputs": 5000,
       "missing": 0,
@@ -131,8 +131,8 @@
       "idempotency_enabled": true,
       "bulk_stage": 2,
       "graceful_runtime_restarts": 0,
-      "elapsed_to_final_output_sec_including_startup": 7.149341324000488,
-      "elapsed_through_verification_sec": 10.154824188999555,
+      "elapsed_to_final_output_sec_including_startup": 7.650726895999469,
+      "elapsed_through_verification_sec": 10.653999678999753,
       "processed_unique_per_stage": [
         5000,
         5000,
@@ -143,19 +143,19 @@
       "handler_retries_per_stage": [
         244,
         244,
-        232,
+        236,
         244,
         244
       ],
       "transport_retries": 52,
       "committed_partitions": 20,
       "topic_counts": {
-        "qf-pipeline-proof-4b1b6a9e7448-0": 5000,
-        "qf-pipeline-proof-4b1b6a9e7448-1": 5000,
-        "qf-pipeline-proof-4b1b6a9e7448-2": 5000,
-        "qf-pipeline-proof-4b1b6a9e7448-3": 5000,
-        "qf-pipeline-proof-4b1b6a9e7448-4": 5000,
-        "qf-pipeline-proof-4b1b6a9e7448-5": 5000
+        "qf-pipeline-proof-93cc4838b809-0": 5000,
+        "qf-pipeline-proof-93cc4838b809-1": 5000,
+        "qf-pipeline-proof-93cc4838b809-2": 5000,
+        "qf-pipeline-proof-93cc4838b809-3": 5000,
+        "qf-pipeline-proof-93cc4838b809-4": 5000,
+        "qf-pipeline-proof-93cc4838b809-5": 5000
       },
       "final_outputs": 5000,
       "missing": 0,
@@ -169,8 +169,8 @@
       "idempotency_enabled": true,
       "bulk_stage": null,
       "graceful_runtime_restarts": 1,
-      "elapsed_to_final_output_sec_including_startup": 7.9193402559994865,
-      "elapsed_through_verification_sec": 10.924450278000222,
+      "elapsed_to_final_output_sec_including_startup": 8.500257314999544,
+      "elapsed_through_verification_sec": 11.504703652999524,
       "processed_unique_per_stage": [
         5000,
         5000,
@@ -188,12 +188,12 @@
       "transport_retries": 52,
       "committed_partitions": 20,
       "topic_counts": {
-        "qf-pipeline-proof-0fad23f5d903-0": 5000,
-        "qf-pipeline-proof-0fad23f5d903-1": 5000,
-        "qf-pipeline-proof-0fad23f5d903-2": 5000,
-        "qf-pipeline-proof-0fad23f5d903-3": 5000,
-        "qf-pipeline-proof-0fad23f5d903-4": 5000,
-        "qf-pipeline-proof-0fad23f5d903-5": 5000
+        "qf-pipeline-proof-1d183fae394c-0": 5000,
+        "qf-pipeline-proof-1d183fae394c-1": 5000,
+        "qf-pipeline-proof-1d183fae394c-2": 5000,
+        "qf-pipeline-proof-1d183fae394c-3": 5000,
+        "qf-pipeline-proof-1d183fae394c-4": 5000,
+        "qf-pipeline-proof-1d183fae394c-5": 5000
       },
       "final_outputs": 5000,
       "missing": 0,

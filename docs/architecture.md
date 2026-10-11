@@ -30,11 +30,15 @@ flowchart TB
 
 One event loop owns consumer state, scheduler state, completion bookkeeping and commit coordination. Broker heartbeats are managed by aiokafka. No worker thread may poll, seek, pause or commit. Shutdown stops fetching, drains queued and active work within a deadline, cancels unfinished tasks, commits only acknowledged contiguous progress, and closes producer, consumer, Redis, executors and tracing resources. Worker-only mode uses the same runtime and signal-driven stop path.
 
+Decorator and explicitly injected worker sets share pure validation before connection. Topic lists and nested metadata are snapshotted at startup. Runtime transports are lifecycle-owned even when injected; an AggregationStore leaves a supplied Redis client application-owned. Independent application cleanup attempts tracing flush even after runtime cleanup failure, preserves primary errors and restores worker-only signal handlers. [Extending](Extending.md) describes these composition contracts.
+
 ## Scheduling and backpressure
 
 Each topic routes to one worker. Each assigned topic-partition has a bounded pending queue and an assignment generation. Workers have bounded active-job capacity; bulk jobs contain records from a single partition. The scheduler starts only jobs with capacity. Bulk batches flush on size or oldest-record age, including quiet topics. Async functions execute directly; synchronous functions execute in their worker's executor with context propagation.
 
 The admission limit counts all fetched records awaiting a successful commit, including finished records behind an unfinished predecessor. This prevents a slow offset from growing a completion set without bound. The runtime pauses full partitions, retains broker heartbeats, seeks to the first unadmitted fetched offset and resumes once capacity is available. Rate limits count dispatched jobs, including bulk jobs, and circuit recovery admits a single half-open probe.
+
+Each admitted job retains a circuit generation. Opening the circuit or starting a half-open probe invalidates older completions. Cancellation/revocation abandons the matching probe, including cancellation before the task first executes. Admission policies apply per runtime process, not across the consumer group.
 
 ## Commit coordinator
 
@@ -52,11 +56,15 @@ Publish all outputs asynchronously, then wait for every acknowledgement before c
 
 The shared ACK publisher retains per-publication receipt state: successful ACKs are skipped, pending futures survive wait deadlines and known failed futures are retried. Its callbacks expose ACK counts/latency and consume late receipt errors. These are local retry guarantees, not atomic fanout or crash transactions. Terminal ETL errors also fail liveness for configured process supervision.
 
+Lost assignment errors are harmless only for a genuinely revoked/replaced partition. Lost processing-lease ownership while the Kafka assignment remains valid terminates the runtime for supervised replay, preventing an invisible permanent offset gap.
+
 At-least-once delivery permits duplicates when a process dies between output acknowledgement and input commit. Producer idempotence reduces duplicate sends within a producer session; it does not make user side effects, multiple topics, Redis and Kafka atomic. Applications must use stable identifiers and idempotent downstream operations.
 
 ## Aggregation
 
 Redis Lua atomically stores a part by input topic and attempts a token-based lease when all required topics exist. Keys are scoped by consumer group, worker and correlation key, using a shared Redis cluster hash tag for related keys. Merge precedence follows the declared `topics_in` order. A lease heartbeat renews ownership while processing. Concurrent complete arrivals wait/retry rather than acknowledge a part that a failed owner might otherwise strand.
+
+Incomplete parts use the configured join timeout. Complete parts retain lease duration plus that timeout, refreshed with each renewal, so they cannot expire before a still-valid processing lease. This also leaves a bounded recovery window after the last lease expiry. Expiration of incomplete parts remains a deliberate retention boundary. A join's failed-handler outcome propagates to the worker circuit after acknowledged DLQ completion.
 
 After successful output or DLQ acknowledgement, a token-checked script records a completion tombstone and removes parts and lease. Failures release only the caller's lease and retain parts. Tombstone TTL and aggregate TTL are bounded by worker configuration. Incomplete parts are acknowledged after Redis storage; durable recovery therefore depends on Redis persistence and availability. Expired incomplete joins are intentionally discarded; operators need a retention policy matching their business window.
 

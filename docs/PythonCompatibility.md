@@ -7,14 +7,14 @@ Python **3.15.0 stable** was released on October 9, 2026; this framework was che
 | Interpreter | Unit/regression and package checks | Live worker validation |
 |---|---|---|
 | CPython 3.11 | GitHub CI | Not separately run on this version |
-| CPython 3.12 | GitHub CI; local 170 unit tests | Local full 189-test profile and CI service job |
+| CPython 3.12 | GitHub CI; local 197 unit tests | Local full 221-test profile and CI service job |
 | CPython 3.13 | GitHub CI | Not separately run on this version |
 | CPython 3.14 | GitHub CI | Not separately run on this version |
-| CPython 3.15.0 | Local 170 unit tests; CI unit/build job; clean wheel HTTP smoke | Local full **189 tests passed in 139.19 s**; dedicated CI service job |
+| CPython 3.15.0 | Local 197 unit tests; CI unit/build job; clean wheel HTTP smoke | Local full **221 tests passed in 186.47 s**; dedicated CI service job |
 
-All seven jobs passed in the [Python 3.15 compatibility CI run](https://github.com/bogdancstrike/qf-framework-fastapi/actions/runs/38169673414): five interpreter unit/build jobs and two live-service jobs.
+All seven jobs passed for the final audited runtime in [CI run 38171953565](https://github.com/bogdancstrike/qf-framework-fastapi/actions/runs/38171953565): five interpreter unit/build jobs and two live-service jobs. The initial 189-test compatibility checkpoint remains archived separately; the current audit has 221 tests.
 
-The default profile skips 19 opt-in live tests. On 3.15 the complete local profile has zero skips/failures, covering real Kafka/Redis, single/sync/bulk/join handlers, retries/DLQ, 10,000-message stress, active SIGKILL and replacement, scale-up, committed partial joins after total worker restart, six replicas sharing four partitions, broker outage and four-service OTLP-to-Jaeger propagation. The existing Starlette TestClient/httpx deprecation warning remains; it did not cause a failure.
+The default profile skips 24 opt-in live tests. On 3.15 the complete local profile has zero skips/failures, covering real Kafka/Redis, single/sync/bulk/join handlers, retries/DLQ, 10,000-message stress, active SIGKILL and replacement, scale-up, committed partial joins after total worker restart, six replicas sharing four partitions, broker outage and four-service OTLP-to-Jaeger propagation. The existing Starlette TestClient/httpx deprecation warning remains; it did not cause a failure.
 
 No framework runtime changes, forced pure-Python transport fallback or unsupported ABI compatibility flags were needed for 3.15. The declared dependency ranges installed successfully and `pip check` passed. Some new-interpreter native packages built from source, so fresh installations may need a C build toolchain until wheels are available for the chosen platform.
 
@@ -60,4 +60,4 @@ Do not run the broker-pause test while another workload uses the same dedicated 
 
 These checks establish the exercised Linux CPython behavior. Free-threaded `3.15t`, optional JIT configurations, PyPy, Windows/macOS deployment and multi-node infrastructure failover were not validated here.
 
-The 1k/100k Flask comparisons and later 10k hardening benchmarks were measured on Python 3.12.3. They remain unchanged and do **not** establish a Python 3.15 speedup. The full-suite elapsed time includes process synchronization, group timeouts and test infrastructure; comparing 139.19 s with another suite duration is not a throughput benchmark.
+The 1k/100k Flask comparisons and later 10k hardening benchmarks were measured on Python 3.12.3. They remain unchanged and do **not** establish a Python 3.15 speedup. The full-suite elapsed time includes process synchronization, group timeouts and test infrastructure; comparing full-suite durations is not a throughput benchmark.

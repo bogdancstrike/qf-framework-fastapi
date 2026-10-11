@@ -4,6 +4,11 @@ Changes preserve the existing worker/config/tracing conventions and at-least-onc
 
 ## Correctness changes
 
+The later [runtime audit](RuntimeAudit.md) also fixes concurrent worker-circuit
+completions/cancellation, active-join retention, joined-handler outcomes,
+configuration injection/precedence and independent lifecycle cleanup. The
+[extension guide](Extending.md) documents the underlying contracts and patterns.
+
 - `@kafka_handler(aggregator=True)` selects a join with default `id`; `aggregate_by="order.id"` selects a custom nested key. The compatibility aggregator decorator remains. Missing/invalid correlation values go to DLQ; bulk aggregation is rejected.
 - Each output/DLQ retains its delivery receipt across transport attempts. Known ACKs are skipped and in-flight sends survive ACK-wait timeouts. Confirmed send failures can be retried; ambiguous failures and process loss still permit duplicates.
 - Redis claims reuse one token across retries. Token-valued completion receipts make a lost completion reply retryable without incorrectly declaring ownership lost. Old tombstones remain recognized.

@@ -73,7 +73,7 @@ Kafka carries durable stage boundaries. Workers transform messages and publish a
 
 Requires **Python 3.11+**. Install in a separate environment from QF Flask: both distributions export `framework`.
 
-Python **3.15.0 stable** passed all **189 tests**, including live Kafka/Redis, replica crashes, broker outage and real Jaeger. CI covers Python **3.11–3.15**, with live-service jobs on 3.12 and 3.15. See [interpreter compatibility and exact dependency evidence](docs/PythonCompatibility.md). Performance tables below retain their original Python 3.12 measurements.
+Python **3.15.0 stable** passed all **221 tests**, including live Kafka/Redis, replica crashes, broker outage and real Jaeger. CI covers Python **3.11–3.15**, with live-service jobs on 3.12 and 3.15. See [interpreter compatibility and exact dependency evidence](docs/PythonCompatibility.md). Performance tables below retain their original Python 3.12 measurements.
 
 ```bash
 git clone https://github.com/bogdancstrike/qf-framework-fastapi.git
@@ -477,6 +477,9 @@ python -m build
 # Real Kafka + Redis, including process crash / restart.
 QF_INTEGRATION=1 python -m pytest tests/test_e2e.py tests/test_crash_recovery.py -v
 
+# Five repetitions: 5,000 messages through five workers, with injected retries.
+QF_INTEGRATION=1 python -m pytest tests/test_pipeline_reliability.py -v
+
 # Real OTLP export and linked spans queried from Jaeger.
 QF_JAEGER=1 python -m pytest tests/test_otlp_jaeger.py -v
 
@@ -491,7 +494,7 @@ python benchmarks/compare_pipelines.py --messages 1000 --repeats 3
 python benchmarks/compare_http.py --requests 1000 --repeats 3
 ```
 
-The expanded local suite passed **189 tests**, including the runnable pipeline walkthrough, Kafka/Redis, 10,000-record stress, SIGKILL recovery, broker outage, six multi-process replica scenarios and real Jaeger checks. The default profile runs 170 unit/regression tests and skips 19 opt-in live tests. Historical 132/133-test checkpoints and the current hardening follow-up are preserved in [validation evidence](benchmarks/results/validation.json).
+The expanded local suite passed **221 tests**, including the runnable pipeline walkthrough, Kafka/Redis, 10,000-record stress, SIGKILL recovery, broker outage, six multi-process replica scenarios and real Jaeger checks. The default profile runs 197 unit/regression tests and skips 24 opt-in live tests. Historical 132/133-test checkpoints and the current hardening follow-up are preserved in [validation evidence](benchmarks/results/validation.json).
 
 Tests cover failed commits, out-of-order completion, numeric gaps, malformed input, output/DLQ failure, async/sync/bulk/aggregate workers, concurrency, lease renewal, crash replay, overload bounds, shutdown, schema validation and trace propagation. CI runs Python 3.11–3.15 checks and dedicated service integration tests on 3.12/3.15. See [benchmarks/README.md](benchmarks/README.md) for original-environment setup and every test profile.
 
@@ -510,6 +513,32 @@ Three trials per workload/version completed with no observed missing, duplicate 
 Replicas sharing a stable Kafka group divide partitions and use shared Redis for joins. Tests scaled **2 → 4 processes**, killed an active worker and started a replacement for single/bulk/join processing; every expected ID and source commit recovered. A committed partial join survived full worker replacement, and **six replicas on four partitions** correctly left two consumers idle. These six scenarios observed zero missing outputs; duplicates remain permitted across ACK/completion crash windows.
 
 Pod restart recovery requires Kafka retention and retained Redis join state. It does not cover broker/Redis data loss or expired partial joins. Terminal ETL errors fail both readiness and liveness; Kubernetes readiness alone does not restart containers. See [the scaling guide and probe template](docs/Scaling.md), [utility contracts](docs/Utilities.md), [step-by-step examples](examples/README.md) and [20 proposed features](docs/Roadmap.md).
+
+### Five-stage reliability evidence
+
+Five independent **5,000-message batches** passed through five workers using real
+Kafka, including Redis replay-ledger off/on, bulk processing and a graceful
+runtime replacement. Every trial recovered injected handler and pre-enqueue
+transport failures within its retry budgets. Checks cover every stage's IDs,
+all six topic counts and commits across all 20 input partitions.
+
+| Result per interpreter | Observed |
+|---|---:|
+| Successful independent trials | 5/5 |
+| Accepted inputs / successful stage executions | 25,000 / 125,000 |
+| Final outputs | 25,000 |
+| Missing / duplicate final outputs / unexpected DLQ | **0 / 0 / 0** |
+| Source partitions verified per trial | 20 |
+
+Both Python **3.12.3 and 3.15.0** passed these trials: **10/10 runs**, 50,000 inputs and 250,000 successful stage executions in total.
+
+Isolated ACK bookkeeping (100,000 receipts, batches of 100, five trials/version) reduced median CPU from **0.351 s to 0.248 s** (**29.5% less CPU**, 1.418× for this microbenchmark). It excludes Kafka/Redis, handlers and commits; it does not establish an end-to-end pipeline speedup.
+
+The five workers share one process; independent-process SIGKILL and scaling
+tests are separate. These are reliability trials, not a new Flask throughput
+comparison or an exactly-once guarantee. See [audit results](docs/RuntimeAudit.md)
+and the [extension guide](docs/Extending.md) for state machines, resource
+ownership, design patterns and focused source documentation.
 
 ## Project map
 
@@ -534,6 +563,7 @@ docs/            Specifications, architecture, operations and comparison
 
 - [Documentation index](docs/README.md), [getting started](docs/GettingStarted.md), [example catalog](examples/README.md)
 - [Worker contracts and cookbook](docs/Workers.md), [testing guide](docs/Testing.md), [troubleshooting](docs/Troubleshooting.md)
+- [Extending the framework](docs/Extending.md), [runtime audit and repeated pipeline evidence](docs/RuntimeAudit.md)
 - [Specification](docs/specs.md), [architecture](docs/architecture.md), [task status](docs/tasks.md)
 - [Migration and compatibility](docs/Migration.md), [configuration](docs/Configuration.md)
 - [Operations and failure recovery](docs/Operations.md), [distributed tracing](docs/Tracing.md)

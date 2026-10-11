@@ -2,7 +2,7 @@
 
 Correct output, committed progress, recovery and speed are separate checks. This guide explains which command verifies each. Install `pip install -e '.[dev,tracing]'` and run from the repository root.
 
-The current full local profile passes **189 tests**: 170 unit/regression tests and 19 opt-in live tests. It includes six new independent-process replica scenarios. Historical benchmark/test checkpoints remain recorded separately in [validation evidence](../benchmarks/results/validation.json).
+The current full local profile passes **221 tests**: 197 unit/regression tests and 24 opt-in live tests. It includes six new independent-process replica scenarios. Historical benchmark/test checkpoints remain recorded separately in [validation evidence](../benchmarks/results/validation.json).
 
 ```bash
 QF_INTEGRATION=1 python -m pytest tests/test_horizontal_recovery.py -v
@@ -19,7 +19,7 @@ ruff format --check .
 python -m build
 ```
 
-The default pytest run exercises unit/regression tests and skips service-dependent tests. It does not prove your Kafka or OTLP deployment works. CI runs unit/build checks on Python 3.11–3.15 and dedicated live-service jobs on 3.12 and 3.15. Local Python 3.15.0 also passed the full 189-test profile; [compatibility evidence](PythonCompatibility.md) records exact versions and scope. Throughput thresholds are intentionally absent from shared CI runners.
+The default pytest run exercises unit/regression tests and skips service-dependent tests. It does not prove your Kafka or OTLP deployment works. CI runs unit/build checks on Python 3.11–3.15 and dedicated live-service jobs on 3.12 and 3.15. Local Python 3.15.0 also passed the full 221-test profile; [compatibility evidence](PythonCompatibility.md) records exact versions and scope. Throughput thresholds are intentionally absent from shared CI runners.
 
 ## Real-service profiles
 
@@ -31,6 +31,9 @@ QF_INTEGRATION=1 python -m pytest tests/test_e2e.py tests/test_crash_recovery.py
 
 # Run the documented application and CLI, checking the final joined output.
 QF_INTEGRATION=1 python -m pytest tests/test_example_pipeline.py -v
+
+# Five runs, each with 5,000 messages through five real worker stages.
+QF_INTEGRATION=1 python -m pytest tests/test_pipeline_reliability.py -v
 
 # Four independent processes, real OTLP export, Jaeger storage verification.
 QF_JAEGER=1 python -m pytest tests/test_otlp_jaeger.py -v
@@ -49,6 +52,33 @@ The complete local profile is:
 ```bash
 QF_INTEGRATION=1 QF_CHAOS=1 QF_JAEGER=1 QF_STRESS_MESSAGES=10000 python -m pytest -q
 ```
+
+## Repeated five-stage reliability
+
+For repeated pipeline reliability, `test_pipeline_reliability.py` uses fresh
+topics/groups per trial and four partitions per topic. All five trials inject
+recoverable handler failures at every stage and known pre-enqueue producer
+failures at stage three. Selected handlers fail twice before succeeding on their
+third permitted attempt.
+
+Configurations cover source-ledger off/on, a bulk third stage and graceful
+replacement of the runtime after at least 500 final-stage jobs have run. The
+replacement shares the stable Kafka group and Redis namespace. Separate existing
+process tests cover SIGKILL; this five-stage scenario uses a graceful restart.
+
+Each trial asserts all 5,000 IDs at every worker, correct stage order in final
+payloads, exactly 5,000 records on all six pipeline topics, all 20 source
+partitions committed, exact injected/observed retry counts and an empty DLQ.
+The collector also checks for extra final outputs after commits. Raw artifacts:
+[Python 3.12](../benchmarks/results/pipeline_reliability.json) and
+[Python 3.15](../benchmarks/results/pipeline_reliability_python315.json).
+`QF_PIPELINE_RESULTS=/path/to/result.json` selects a separate evidence file.
+
+These trials test successful recovery within configured retry budgets on a local
+RF1 broker and Redis. They do not prove exactly-once effects, multi-node
+durability, unlimited retry survival or production capacity. Durations include
+startup and verification; they are reliability-run timings, not controlled
+Flask/FastAPI throughput comparisons.
 
 ## Test your own business transformation
 
