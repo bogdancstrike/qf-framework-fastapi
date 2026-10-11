@@ -1,6 +1,6 @@
 """Small deterministic transformations; replace branches with real async clients."""
 
-from framework.decorators import kafka_aggregator, kafka_handler, retry_to_dlq
+from framework.decorators import kafka_handler, retry_to_dlq
 from framework.tracing import get_tracer
 
 from . import topics
@@ -41,7 +41,8 @@ async def preview(message, consumer_name, metadatas):
     return {**message, "preview": message["text"][:80].upper()}
 
 
-@kafka_aggregator(
+@kafka_handler(
+    aggregator=True,
     name=f"{topics.PREFIX}.join",
     topics_in=[topics.STATS_OUTPUT, topics.PREVIEW_OUTPUT],
     topics_out=[topics.OUTPUT],

@@ -97,7 +97,13 @@ def create_app(settings=None, *, lifespan=None, metrics=None):
 
     @app.get("/health/live", tags=["Operations"])
     async def live():
-        return {"status": "alive"}
+        # Readiness alone removes HTTP traffic; Kubernetes does not restart it.
+        # Only an unrecoverable worker error requests a restart, not startup or
+        # temporary dependency backoff, whose retries still belong to the runtime.
+        failed = settings.enable_etl and getattr(app.state.runtime, "error", None) is not None
+        return JSONResponse(
+            {"status": "failed" if failed else "alive"}, status_code=503 if failed else 200
+        )
 
     @app.get("/health/ready", tags=["Operations"])
     async def ready():

@@ -11,3 +11,13 @@
 - [ ] Benchmark before/after with source deduplication enabled and real Kafka/Redis. Preserve old 1k/100k evidence and distinguish the new workload and code revision.
 - [ ] Run unit, E2E, crash, chaos, stress and real Jaeger checks. Update guides, examples, specs and both report copies, commit and push.
 - [ ] Recommend 20 optional follow-up features with their benefits, keeping them outside implementation until the user selects them.
+
+## Replica and restart follow-up
+
+Keep the original framework unchanged. Exercise independent OS processes with shared Kafka groups and Redis, using four partitions and unique test namespaces. Process tests approximate pod failures; they do not certify a Kubernetes cluster or broker/Redis failover.
+
+- [ ] Add `tests/support/pod_worker.py` with file-controlled handler stalls, process identity in outputs, and assignment snapshots. Use real `KafkaRuntime`, shared worker names and group, and optional source ledger.
+- [ ] Add `tests/test_horizontal_recovery.py`: scale 2 → 4 consumers during work, kill an active consumer, start a replacement, verify every ID and every source commit for single, bulk and join workers; also kill after committed partial join storage and complete the join after restart.
+- [ ] Reproduce the terminal-runtime liveness gap in `tests/test_api.py`, then return 503 only for a terminal ETL error from `/health/live`. Keep startup, temporary readiness loss and normal HTTP-only service live. Document native Kubernetes readiness versus restart behavior.
+- [ ] Publish raw per-scenario evidence with partition ownership, expected/observed IDs, duplicate counts, restart timing and committed offsets in `benchmarks/results/horizontal_recovery.json`.
+- [ ] Document group identity, worker contracts, partition limits, Redis persistence/TTL, external idempotency and deployment probes in `docs/Scaling.md`, the examples guide and both comparison reports. Run the full live suite, build, commit and push.

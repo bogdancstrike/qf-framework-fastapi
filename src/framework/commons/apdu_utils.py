@@ -7,11 +7,13 @@ from ..commons.hex import h2h
 from ..commons.logger import logger
 
 
-def nth_obj(rx: list[dict[str, object]] = [], obj: Optional[str] = "", n: Optional[int] = 0):
-    return rx[n][obj] if (len(rx) > n and obj in rx[n] and rx[n][obj]) else None
+def nth_obj(rx=None, obj: Optional[str] = "", n: Optional[int] = 0):
+    if not rx or not isinstance(n, int) or not -len(rx) <= n < len(rx):
+        return None
+    return rx[n].get(obj) if isinstance(rx[n], dict) else None
 
 
-def first_obj(rx: list[dict[str, object]] = [], obj: Optional[str] = ""):
+def first_obj(rx=None, obj: Optional[str] = ""):
     return nth_obj(rx=rx, obj=obj)
 
 
@@ -48,11 +50,12 @@ def lower_rx(
     if isinstance(rx, dict):
         new_dict = {}
         for k, v in rx.items():
-            if k in _skip:
+            canonical = k.lower() if isinstance(k, str) else k
+            new_key = canonical if lower else k
+            if canonical in _skip:
                 # păstrează exact cum e (cheie + structură internă)
-                new_dict[k] = v
+                new_dict[new_key] = v
             else:
-                new_key = k.lower() if lower else k
                 new_dict[new_key] = lower_rx(v, lower=lower, _skip=_skip)
         rx = new_dict
 
@@ -215,64 +218,59 @@ def apdu_header_compact(cla, ins, p1p2):
 
 
 def apdu_expand(apdu="00 00 00 00"):
-    bcmd = h2b(apdu)
-    lx = len(bcmd)
-    if lx < 4:
-        return None, None, None
-    cla, ins, p1p2 = apdu_header_expand(header=apdu)
-    if cla is None:
-        return None, None, None
-    data = b""
-    le = b""
-    match lx:
-        case 4:
-            data = b""
-            le = b""
-        case 5:
-            le = bcmd[4:5]
-            data = b""
-        case 6:
-            le = b""
-            data = bcmd[5:6]
-        case _:
-            match lx > 7:
-                case True:
-                    i = h2i(m0h(apdu, 4, 7)) + 7
-                    match lx - i:
-                        case 0:
-                            data = bcmd[7:i]
-                        case 1:
-                            data = bcmd[7:i]
-                            le = bcmd[:1]
-                        case _:
-                            j = h2i(m0h(apdu, 4, 5)) + 5
-                            match lx - j:
-                                case 0:
-                                    data = bcmd[5:j]
-                                case 1:
-                                    data = bcmd[5:j]
-                                    le = bcmd[:1]
-                                case _:
-                                    return None, None, None
-
-                case False:
-                    j = h2i(m0h(apdu, 4, 5)) + 5
-                    match lx - j:
-                        case 0:
-                            data = bcmd[5:j]
-                        case 1:
-                            data = bcmd[5:j]
-                            le = bcmd[:1]
-                        case _:
-                            return None, None, None
-    return "%s %s %s" % (cla, ins, p1p2), b2h(data), b2h(le)
+    """Decode ISO 7816 short/extended command cases; reject invalid lengths."""
+    invalid = (None, None, None)
+    try:
+        command = h2b(apdu)
+    except (TypeError, ValueError):
+        return invalid
+    if len(command) < 4:
+        return invalid
+    header, body = b2h(command[:4]), command[4:]
+    if not body:
+        return header, "", ""
+    if len(body) == 1:
+        return header, "", b2h(body)
+    if body[0] != 0:
+        length, start, le_width = body[0], 1, 1
+    else:
+        if len(body) == 3:
+            return header, "", b2h(body)  # Case 2E includes its leading 00.
+        if len(body) < 3:
+            return invalid
+        length, start, le_width = int.from_bytes(body[1:3], "big"), 3, 2
+        if length == 0:
+            return invalid
+    end = start + length
+    if len(body) not in (end, end + le_width):
+        return invalid
+    return header, b2h(body[start:end]), b2h(body[end:])
 
 
 def apdu_compact(header="00 00 00 00", data="", le=""):
-    # cla, ins, p1p2 = apdu_header_expand(header=header)
-    lc = lhh(data)
-    lc = lc if lc != "00" else ""
-    return h2h(f"{header} {lc} {data} {le}")
+    """Encode a command; Le is encoded bytes, not a numeric response length."""
+    head, expected = h2b(header), h2b(le or "")
+    if len(head) != 4:
+        raise ValueError("APDU header must contain exactly four bytes")
+    size = lhi(data or "")
+    if size > 65535:
+        raise ValueError("APDU data cannot exceed 65535 bytes")
+    if not size:
+        if len(expected) == 2:
+            expected = b"\x00" + expected
+        if len(expected) > 3 or len(expected) == 3 and expected[0] != 0:
+            raise ValueError("Invalid APDU Le encoding")
+        return b2h(head + expected)
+    if len(expected) == 3 and expected[0] == 0:
+        expected = expected[1:]
+    extended = size > 255 or len(expected) == 2
+    if len(expected) > 2:
+        raise ValueError("Invalid APDU Le encoding")
+    if extended and len(expected) == 1:
+        expected = (256 if expected[0] == 0 else expected[0]).to_bytes(2, "big")
+    length = b"\x00" + size.to_bytes(2, "big") if extended else bytes([size])
+    # Preserve the legacy {"l":N} body placeholders until application expansion.
+    return h2h(f"{b2h(head + length)} {data} {b2h(expected)}")
 
 
 def split_apdu(apdu):
@@ -287,7 +285,7 @@ def split_apdu(apdu):
     return header, data, le
 
 
-def payload_colapse(apdu_commands: Optional[list[dict[str, object]]] = []):
+def payload_colapse(apdu_commands: Optional[list[dict[str, object]]] = None):
     apdus = []
     if apdu_commands and len(apdu_commands) > 0:
         apdus = []
@@ -308,7 +306,7 @@ def payload_colapse(apdu_commands: Optional[list[dict[str, object]]] = []):
     return apdus
 
 
-def payload_expand(apdu_commands: Optional[list[dict[str, object]]] = []):
+def payload_expand(apdu_commands: Optional[list[dict[str, object]]] = None):
     apdus = []
     if apdu_commands and len(apdu_commands) > 0:
         apdus = []

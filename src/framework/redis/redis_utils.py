@@ -1,6 +1,9 @@
 """Async Redis helper. Each instance owns its pool; every method must be awaited."""
 
 from redis.asyncio import Redis
+from redis.exceptions import TimeoutError as RedisTimeoutError
+from redis.asyncio.retry import Retry
+from redis.backoff import NoBackoff
 
 
 class RedisUtils:
@@ -22,6 +25,8 @@ class RedisUtils:
             max_connections=max_connections,
             socket_timeout=socket_timeout,
             socket_connect_timeout=socket_connect_timeout,
+            retry=Retry(NoBackoff(), 1 if retry_on_timeout else 0),
+            retry_on_error=[RedisTimeoutError] if retry_on_timeout else [],
         )
         self.redis = (
             Redis.from_url(url, **args)
@@ -30,7 +35,11 @@ class RedisUtils:
         )
 
     async def __aenter__(self):
-        await self.redis.ping()
+        try:
+            await self.redis.ping()
+        except BaseException:
+            await self.close()
+            raise
         return self
 
     async def __aexit__(self, *args):

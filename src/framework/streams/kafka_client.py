@@ -14,24 +14,36 @@ class KafkaClient(StreamClientInterface):
         self.producer = None
 
     async def __aenter__(self):
+        if self.producer is not None:
+            raise RuntimeError("KafkaClient is already entered")
         self.producer = AIOKafkaProducer(
             bootstrap_servers=self.bootstrap_servers, enable_idempotence=True, **self.security
         )
         try:
             await self.producer.start()
         except BaseException:
-            await self.producer.stop()
+            try:
+                await self.producer.stop()
+            finally:
+                self.producer = None
             raise
         return self
 
     async def __aexit__(self, *args):
         if self.producer:
-            await self.producer.stop()
+            try:
+                await self.producer.stop()
+            finally:
+                self.producer = None
 
     async def put_message(self, topic_name, message, key=None):
         if self.producer is None:
             raise RuntimeError("Use KafkaClient with async with")
-        value = json.dumps(message).encode() if not isinstance(message, bytes) else message
+        value = (
+            json.dumps(message, allow_nan=False).encode()
+            if not isinstance(message, bytes)
+            else message
+        )
         key = key.encode() if isinstance(key, str) else key
         return await self.producer.send_and_wait(
             topic_name, value, key=key, headers=inject_trace_headers()

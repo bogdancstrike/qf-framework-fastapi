@@ -68,7 +68,7 @@ def call_circuit_breaker(*, fail_max=5, reset_timeout=30, name=None, exclude=())
 
     def decorate(fn):
         lock = threading.Lock()
-        state = {"failures": 0, "until": 0.0, "probe": False}
+        state = {"failures": 0, "until": 0.0, "probe": False, "generation": 0}
 
         def enter():
             with lock:
@@ -76,42 +76,47 @@ def call_circuit_breaker(*, fail_max=5, reset_timeout=30, name=None, exclude=())
                     raise CircuitOpenError(name or fn.__qualname__)
                 if state["until"]:
                     state["probe"] = True
+                    state["generation"] += 1
+                return state["generation"]
 
-        def leave(error=None):
+        def leave(generation, error=None):
             with lock:
+                if generation != state["generation"]:
+                    return  # An older in-flight result cannot reset a newer circuit.
                 if error is None or isinstance(error, exclude):
                     state.update(failures=0, until=0.0, probe=False)
-                elif isinstance(error, asyncio.CancelledError):
+                elif not isinstance(error, Exception):
                     state["probe"] = False
                 else:
                     state["failures"] += 1
                     if state["probe"] or state["failures"] >= fail_max:
                         state["until"] = time.monotonic() + reset_timeout
+                        state["generation"] += 1
                     state["probe"] = False
 
         if inspect.iscoroutinefunction(fn):
 
             @functools.wraps(fn)
             async def wrapper(*args, **kwargs):
-                enter()
+                generation = enter()
                 try:
                     result = await fn(*args, **kwargs)
                 except BaseException as exc:
-                    leave(exc)
+                    leave(generation, exc)
                     raise
-                leave()
+                leave(generation)
                 return result
         else:
 
             @functools.wraps(fn)
             def wrapper(*args, **kwargs):
-                enter()
+                generation = enter()
                 try:
                     result = fn(*args, **kwargs)
                 except BaseException as exc:
-                    leave(exc)
+                    leave(generation, exc)
                     raise
-                leave()
+                leave(generation)
                 return result
 
         wrapper.__circuit_breaker__ = state

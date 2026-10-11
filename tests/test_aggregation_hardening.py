@@ -1,3 +1,5 @@
+import asyncio
+import json
 from dataclasses import replace
 
 import fakeredis.aioredis
@@ -9,6 +11,95 @@ from framework.etl.processing import Processor
 from framework.observability import Metrics
 from framework.redis.aggregation import AggregationStore
 from conftest import Producer, record
+
+
+async def test_bulk_source_ledger_skips_completed_subset_and_counts_it(settings, spec):
+    settings.idempotency_enabled = True
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = AggregationStore(settings, redis)
+    producer, metrics = Producer(), Metrics()
+    processor = Processor(settings, producer, metrics, aggregation=store)
+    rows = [record(i, json.dumps({"id": str(i)}).encode()) for i in range(5)]
+    try:
+        await processor.handle(spec, rows[:1], lambda: True)
+        await processor.handle(replace(spec, bulk_mode=True), rows, lambda: True)
+        await processor.handle(replace(spec, bulk_mode=True), rows, lambda: True)
+        assert len(producer.sent) == 5
+        assert {json.loads(value)["id"] for _, value, _ in producer.sent} == {
+            str(i) for i in range(5)
+        }
+        assert metrics.processed.labels(spec.name, "duplicate")._value.get() == 6
+        assert metrics.idempotency.labels(spec.name, "skipped")._value.get() == 6
+    finally:
+        await redis.aclose()
+
+
+async def test_concurrent_replay_waits_for_source_owner_then_skips(settings, spec):
+    settings.idempotency_enabled = True
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def work(message, *_):
+        entered.set()
+        await release.wait()
+        return message
+
+    producer = Producer()
+    processor = Processor(
+        settings, producer, Metrics(), aggregation=AggregationStore(settings, redis)
+    )
+    worker = replace(spec, fn=work)
+    first = asyncio.create_task(processor.handle(worker, [record()], lambda: True))
+    second = None
+    try:
+        await entered.wait()
+        second = asyncio.create_task(processor.handle(worker, [record()], lambda: True))
+        await asyncio.sleep(0.01)
+        assert not second.done()
+        release.set()
+        await asyncio.wait_for(asyncio.gather(first, second), 2)
+        assert len(producer.sent) == 1
+    finally:
+        release.set()
+        for task in (first, second):
+            if task and not task.done():
+                task.cancel()
+        await asyncio.gather(*(t for t in (first, second) if t), return_exceptions=True)
+        await redis.aclose()
+
+
+async def test_lost_redis_replies_do_not_repeat_handler_or_strand_own_claim(settings, spec):
+    settings.idempotency_enabled = True
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+
+    class AmbiguousStore(AggregationStore):
+        claims_lost = finishes_lost = False
+
+        async def claim_many(self, requests):
+            result = await super().claim_many(requests)
+            if not self.claims_lost:
+                self.claims_lost = True
+                raise ConnectionError("Redis applied claim, reply lost")
+            return result
+
+        async def finish_many(self, claims, ttl):
+            await super().finish_many(claims, ttl)
+            if not self.finishes_lost:
+                self.finishes_lost = True
+                for claim in claims:
+                    claim.finished = False  # No acknowledged receipt at the caller.
+                raise ConnectionError("Redis applied completion, reply lost")
+
+    producer = Producer()
+    processor = Processor(
+        settings, producer, Metrics(), aggregation=AmbiguousStore(settings, redis)
+    )
+    try:
+        await processor.handle(spec, [record()], lambda: True)
+        await processor.handle(spec, [record()], lambda: True)
+        assert producer.calls == 1
+    finally:
+        await redis.aclose()
 
 
 @pytest.mark.parametrize(
@@ -79,3 +170,5 @@ async def test_finish_is_retryable_after_reply_loss_but_fences_other_tokens(sett
             await store.finish(replace(claim, token="wrong-owner", finished=False), 60)
     finally:
         await redis.aclose()
+
+

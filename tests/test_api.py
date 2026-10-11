@@ -102,9 +102,16 @@ def test_readiness_tracks_runtime_failure():
         runtime_factory=Runtime,
     ).build_app()
     with TestClient(app) as client:
+        assert client.get("/health/live").status_code == 200
         assert client.get("/health/ready").status_code == 200
         app.state.runtime.ready = False
         assert client.get("/health/ready").status_code == 503
+        assert client.get("/health/live").status_code == 200
+        app.state.runtime.error = RuntimeError("terminal transport failure")
+        response = client.get("/health/live")
+        assert response.status_code == 503
+        assert response.json() == {"status": "failed"}
+        assert "transport" not in response.text
 
 
 def test_error_response_keeps_request_id_and_hides_exception():
