@@ -1,5 +1,5 @@
 {
-  "trace_id": "753fd003ed62deeddf4478d28777f894",
+  "trace_id": "6b5415a5432febe48e50cfe476681f43",
   "spans": 13,
   "services": [
     "qf-otlp-a",
@@ -9,21 +9,21 @@
   ],
   "parent_child_links": 12,
   "root": "POST /publish",
-  "ui_url": "http://localhost:26686/trace/753fd003ed62deeddf4478d28777f894",
-  "final_kafka_trace_id": "753fd003ed62deeddf4478d28777f894",
+  "ui_url": "http://localhost:26686/trace/6b5415a5432febe48e50cfe476681f43",
+  "final_kafka_trace_id": "6b5415a5432febe48e50cfe476681f43",
   "operations": [
-    "kafka.process qf-trace-05241e199631-join-b",
+    "kafka.process qf-trace-9dc80667b67f-b",
+    "kafka.process qf-trace-9dc80667b67f-join-a",
     "application.merge",
-    "fastapi.serialization",
     "POST /publish",
     "fastapi.dependencies",
+    "kafka.process qf-trace-9dc80667b67f-in",
+    "kafka.process qf-trace-9dc80667b67f-a",
     "application.b",
-    "kafka.process qf-trace-05241e199631-b",
-    "kafka.process qf-trace-05241e199631-a",
+    "kafka.process qf-trace-9dc80667b67f-join-b",
+    "fastapi.serialization",
+    "fastapi.endpoint",
     "application.ingress",
-    "kafka.process qf-trace-05241e199631-in",
-    "application.a",
-    "kafka.process qf-trace-05241e199631-join-a",
-    "fastapi.endpoint"
+    "application.a"
   ]
 }

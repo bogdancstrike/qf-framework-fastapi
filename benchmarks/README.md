@@ -64,3 +64,14 @@ python benchmarks/original_probes.py
 The original probes load selected original functions via AST, inject failures at transport boundaries, and execute the original aggregation Lua against real Redis. They are executable defect reproductions, separate from process-level crash tests of the new framework. [Tracing.md](../docs/Tracing.md) describes the four-process real Jaeger proof.
 
 Raw JSON and dependency snapshots are tracked under [results](results). Detailed methodology, complete tables, failure evidence and deployment limits are in the [comparison report](../docs/qf_flask_vs_qf_fastapi_report.md). No throughput thresholds are asserted in CI: shared runners have unstable performance. CI tests behavioral bounds and correctness; performance regressions require comparison on a controlled host.
+
+## 100,000-message validation
+
+```bash
+python benchmarks/compare_pipelines.py --messages 100000 --repeats 3 --concurrency 8 \
+  --engines original_ack,async --workloads noop,io,bulk,retry \
+  --timeout 900 --stall-timeout 60 --progress-interval 30 \
+  --output benchmarks/results/pipelines_100k.json
+```
+
+The overall deadline is per warmup/measurement phase, while the stall deadline counts time without a new unique output or advancing source commit. Progress JSON is emitted on stdout. Failed-trial records include phase, stage, received/unique counts and expected/observed source offsets. Incremental ID tracking avoids repeatedly rebuilding a full set while collecting large runs; payloads, workers, delivery settings and measured boundaries are unchanged. Compare successful-trial medians alongside success counts, not by silently dropping failed runs.

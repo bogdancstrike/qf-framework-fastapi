@@ -6,3 +6,12 @@ __pycache__
 *.pyc
 .env
 benchmarks/results
+
+.env.*
+!.env.example
+*.pem
+*.key
+*.log
+dist
+build
+*.egg-info

@@ -136,3 +136,17 @@ async def test_missing_aggregation_key_goes_to_dlq(settings, spec):
     processor = Processor(settings, producer, Metrics())
     await processor.handle(aggregator, [record()], lambda: True)
     assert producer.sent[0][0] == settings.error_topic
+
+
+@pytest.mark.parametrize("identifier", [0, False, "0"])
+async def test_falsy_valid_ids_survive_processing(settings, spec, identifier):
+    producer = Producer()
+    await Processor(settings, producer, Metrics()).handle(
+        spec, [record(value=json.dumps({"id": identifier}).encode())], lambda: True
+    )
+    assert json.loads(producer.sent[0][1])["id"] == identifier
+    from framework.decorators.kafka_workers import ensure_message_id
+
+    payload = {"id": identifier}
+    assert ensure_message_id(payload) == str(identifier)
+    assert payload["id"] == identifier

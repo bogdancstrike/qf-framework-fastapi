@@ -12,6 +12,7 @@ Declare a worker, choose its input/output topics, and let the runtime manage con
 ```python
 from framework.decorators import kafka_handler, retry_to_dlq
 
+
 @retry_to_dlq(max_attempts=3, dlq_topic="text.dlq")
 @kafka_handler(
     name="normalize", topics_in=["text.in"], topics_out=["text.normalized"], max_workers=16
@@ -132,6 +133,7 @@ settings = FrameworkSettings(enable_etl=False, enable_dynamic_endpoints=False)
 framework = FrameworkApp(settings)
 app = framework.build_app()
 
+
 @app.get("/hello/{name}")
 async def hello(name: str):
     return {"hello": name}
@@ -186,6 +188,7 @@ Every worker receives `(message_or_batch, consumer_name, metadatas)` and returns
 ```python
 from framework.decorators import kafka_handler
 
+
 @kafka_handler(
     name="fanout",
     topics_in=["events.in"],
@@ -220,6 +223,7 @@ Batches stay within one source partition. Quiet partitions flush partial batches
 
 ```python
 from framework.decorators import kafka_aggregator
+
 
 @kafka_aggregator(
     name="merge",
@@ -365,7 +369,41 @@ The real collector test crosses **four independent processes**, HTTP, Kafka fano
 Results come from real local Kafka/Redis and loopback HTTP on an AMD Ryzen 9 9950X3D host, Python 3.12.3. Raw repetitions, dependency versions, CPU/RSS and latency percentiles are included. These are finite synthetic workloads on one broker, not production capacity guarantees.
 
 <!-- BENCHMARK_TABLES_START -->
-Benchmark tables are generated from the tracked raw measurements; see the [comprehensive comparison](docs/qf_flask_vs_qf_fastapi_report.md).
+### Kafka workers · 1,000 messages, eight jobs
+
+Three repetitions per cell; all 48 final worker trials completed with no missing/duplicate/DLQ records. Throughput is measured to observed final output; the report also includes committed-offset throughput.
+
+| Workload | Stock Flask msg/s | Flask ACK variant msg/s | FastAPI async msg/s | Async p95 ms |
+| --- | --- | --- | --- | --- |
+| Identity | 11,020 | 301 | 1,397 | 662.08 |
+| 5 ms I/O / message | 300 | 298 | 1,331 | 694.40 |
+| 32-record bulk, 5 ms / job | 1,696 | 1,712 | 15,990 | 39.28 |
+| 10% transient retry | 6,351 | 319 | 1,388 | 666.40 |
+
+### Larger bulk bursts · 5,000 messages, 32 jobs
+
+| Engine | Successful trials | Median msg/s | Median p95 ms |
+|---|---|---:|---:|
+| async | 3/3 | 14,136 | 165.43 |
+| sync | 3/3 | 14,454 | 196.21 |
+| original_ack | 2/3 | 18,202 | 133.11 |
+
+One original trial reached the 60-second deadline and is excluded from successful-trial medians; its cause was not isolated by the harness. The original ACK variant only changes output waiting, not its other reliability defects.
+
+### HTTP · 1,000 requests per trial
+
+| Workload | Clients | Flask req/s | FastAPI req/s | Flask p95 ms | FastAPI p95 ms |
+| --- | --- | --- | --- | --- | --- |
+| noop | 1 | 2,105 | 2,397 | 0.60 | 0.52 |
+| noop | 16 | 1,443 | 1,408 | 38.40 | 38.10 |
+| noop | 64 | 1,335 | 1,300 | 131.03 | 133.79 |
+| noop | 256 | 901 | 834 | 752.13 | 765.55 |
+| io | 1 | 169 | 171 | 6.09 | 6.11 |
+| io | 16 | 1,784 | 1,849 | 15.83 | 14.63 |
+| io | 64 | 662 | 703 | 294.46 | 280.58 |
+| io | 256 | 639 | 689 | 1,019.39 | 927.29 |
+
+All 48 HTTP trials completed with zero errors. Results include client connection-pool effects; high concurrency is not a server-capacity certification.
 <!-- BENCHMARK_TABLES_END -->
 
 The stock Flask single-message path can be faster by returning before output ACK. The explicitly labeled `original_ack` harness variant waits for single-message output ACKs, but retains the original coordinator/DLQ/aggregation defects. HTTP results are mixed and include load-driver contention at high concurrency. Large-batch tests exposed a fetch-wait bottleneck: reducing the new consumer's configurable default from 500 to 50 ms improved the measured 5,000-record bulk workload, while successful original bulk runs remained competitive. The report includes timeout trials and successful-trial counts.

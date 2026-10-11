@@ -17,6 +17,7 @@ The compose stack maps Jaeger's OTLP gRPC port 4317 to host 24317 and its UI to 
 from framework.decorators import kafka_handler
 from framework.tracing import get_tracer
 
+
 @kafka_handler(name="enrich", topics_in=["events.in"], topics_out=["events.out"])
 async def enrich(message, consumer_name, metadatas):
     with get_tracer().start_as_current_span("application.enrich") as span:

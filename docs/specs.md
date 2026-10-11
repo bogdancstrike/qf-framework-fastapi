@@ -12,7 +12,7 @@ Kafka consumption, publishing, acknowledgements, Redis aggregation, backoff, shu
 
 1. Preserve `@kafka_handler`, `@kafka_aggregator`, `@retry_to_dlq`, `@rate_limit`, `@circuit_breaker`, and call policy imports. Accept sync and async worker functions with `(message_or_batch, consumer_name, metadatas)` arguments. Register one worker per topic and reject invalid worker definitions before connecting.
 2. Support single messages, per-partition bulk batches flushed by size or maximum age, and deterministic aggregation by a nested correlation key. A worker may return a dict, a list of dicts, or `None` to intentionally filter an input.
-3. Compile endpoint JSON at application construction. Resolve handler imports once, validate namespace/model/method/path declarations, create Pydantic request schemas, and expose OpenAPI and interactive documentation. Support typed path parameters, query parameters, sync/async handlers, and a documented Flask request compatibility adapter.
+3. Accept null/omitted endpoint model names, null/omitted top-level models and null named model definitions without requiring a body or schema validation; invalid JSON remains an error. Compile endpoint JSON at application construction. Resolve handler imports once, validate namespace/model/method/path declarations, create Pydantic request schemas, and expose OpenAPI and interactive documentation. Support typed path parameters, query parameters, sync/async handlers, and a documented Flask request compatibility adapter.
 4. Use validated settings loaded from explicit arguments, environment, or dotenv in that precedence. Do not depend on an application-global `config.Config`; do not connect to services at import time. HTTP-only operation must require no Kafka or Redis.
 5. Own connections and tasks through FastAPI lifespan. Propagate startup failure; expose runtime failure in readiness; drain bounded work and commit acknowledged progress before closing clients. Support a worker-only executable path.
 
@@ -32,7 +32,7 @@ Provide `/health/live`, `/health/ready` and `/metrics`. Readiness must fail duri
 
 ## Compatibility and exclusions
 
-Keep utility modules where practical. Replace unsafe expression evaluation with literal parsing. Remove global Redis singleton behavior and blocking KEYS enumeration. Flask extension objects, Flask request globals, WSGI startup, gevent execution and automatic discovery through `config.Config` are not retained. Document migration examples for every intentionally changed entry point and semantics. Filesystem distributed leases cannot provide robust fencing on arbitrary NFS deployments; Redis is the supported distributed locking backend.
+Keep utility modules where practical. Replace unsafe expression evaluation with literal parsing. Remove global Redis singleton behavior and blocking KEYS enumeration. Flask extension objects, Flask request globals, WSGI startup and gevent execution are not retained. `load_framework_settings()` may discover `config.Config` when present; explicit settings require no such module. Document migration examples for every intentionally changed entry point and semantics. Filesystem distributed leases cannot provide robust fencing on arbitrary NFS deployments; Redis is the supported distributed locking backend.
 
 ## Validation and acceptance
 
@@ -41,3 +41,7 @@ Provide unit and regression tests, real Kafka/Redis end-to-end tests, HTTP load 
 Compare the original framework and the new one with fixed payloads, partition counts, worker concurrency, handler work, producer settings and dependency versions. Report differences when equivalent delivery settings cannot be configured. Measure throughput, latency distribution, errors, delivered/duplicate/missing records, CPU/RSS and capacity where feasible. Distinguish synthetic measurements from real broker measurements and disclose warmup, repeats, hardware, environment and limitations. Do not claim a performance gain based solely on the architecture.
 
 Write the comprehensive comparison at `../qf_flask_vs_qf_fastapi_report.md` relative to the project root. Include performance, reliability, code maintainability, extensibility, measured results and reproduction commands. Final acceptance requires a passing test suite, clean lint/build/import checks, runnable examples, complete operations documentation and an accurate record of any unexecuted tests.
+
+## Implemented extension: replay ledger and tracing lineage
+
+Optional Redis source-coordinate deduplication uses renewable claims and completion records with configurable TTL. It narrows completed replay duplication and retains a documented ACK-to-ledger window. Bulk outputs preserving IDs retain their source trace IDs and link producer spans to the batch. Distinct source traces are not rewritten into one trace. Four-process OTLP verification archives real Jaeger results. See Operations, Tracing and the comparison report for measured evidence and limits.

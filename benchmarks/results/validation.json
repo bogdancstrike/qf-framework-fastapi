@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-11",
+  "python": "3.12.3",
+  "unit_and_live_tests": {
+    "passed": 132,
+    "skipped": 0,
+    "stress_messages": 10000,
+    "includes": [
+      "Kafka/Redis E2E",
+      "SIGKILL replay with/without ledger",
+      "dedicated broker pause/restart",
+      "real OTLP/Jaeger four-process propagation"
+    ],
+    "elapsed_sec": 39.02
+  },
+  "ruff_check": "passed",
+  "ruff_format": "passed including Markdown code blocks",
+  "wheel_and_sdist": "built",
+  "clean_wheel_http_smoke": "passed without tracing extras or config.Config",
+  "docker_build_and_non_root_http_smoke": "passed: readiness, null-model ping and typed echo",
+  "original_source_unchanged": true,
+  "warning": "Starlette TestClient httpx deprecation; no failures",
+  "ci": "Latest live integration job passed; earlier matrix run failed Markdown snippet formatting, corrected; final run pending",
+  "unexecuted": [
+    "multi-broker failover",
+    "Redis failover/data loss",
+    "TLS/SASL live integration",
+    "multi-hour soak",
+    "production business payload/effect testing"
+  ]
+}

@@ -65,3 +65,11 @@ The package owns no global logging handlers or network resources at import. Each
 ## Design rationale
 
 FastAPI supplies ASGI lifecycle and generated schemas. aiokafka and redis.asyncio remove broker/Redis blocking from worker threads. Per-worker sync executors preserve existing integrations without blocking native async workloads. Manual, ACK-gated commits replace unsafe fire-and-forget completion. In-memory scheduled retries avoid immediate retry-topic loops and keep original source identity, at the cost of attempt counts restarting after a process crash. Explicit bounds and generation fencing make failure recovery reviewable and testable.
+
+## Optional source replay ledger
+
+When enabled, the processing layer claims each source topic/partition/offset in Redis, starts lease renewal, and filters already completed records before handler execution. It records completion only after output/DLQ acknowledgement and releases leases on failure. Keys are group/worker scoped. This adds Redis dependency to ordinary workers and a finite replay window; it is not a business-ID deduplicator or Kafka/Redis transaction.
+
+## Measured fetch tuning
+
+The consumer exposes `fetch_max_wait_ms`, default 50 ms. Initial larger-burst measurements with the library default 500 ms showed long idle periods during bounded pause/seek/refetch cycles; a measured lower-wait follow-up improved bulk throughput. The setting trades idle request traffic for latency and is independent of application poll timeout. Detailed before/after measurements and competing original results remain in the comparison report.

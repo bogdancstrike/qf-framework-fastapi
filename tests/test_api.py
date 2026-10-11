@@ -125,7 +125,7 @@ def test_error_response_keeps_request_id_and_hides_exception():
 
 
 @pytest.mark.parametrize("native", [False, True])
-@pytest.mark.parametrize("method", ["GET", "POST", "PATCH"])
+@pytest.mark.parametrize("method", ["GET", "POST", "PUT", "PATCH", "DELETE"])
 @pytest.mark.parametrize(
     "variant", ["null_name", "omitted_name", "null_models", "omitted_models", "null_definition"]
 )

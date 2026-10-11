@@ -235,7 +235,7 @@ class Processor:
                         value = json.loads(record.value)
                         if not isinstance(value, dict):
                             raise ValueError("Kafka payload must be a JSON object")
-                        if not value.get("id"):
+                        if value.get("id") is None or value["id"] == "":
                             value["id"] = f"{record.topic}:{record.partition}:{record.offset}"
                     except (ValueError, TypeError, UnicodeError) as exc:
                         await self.dlq(spec, [record], exc, 0, valid)

@@ -39,7 +39,7 @@ def _get_attr_anywhere(fn: Callable[..., Any], attr: str):
 
 def ensure_message_id(message: dict) -> str:
     mid = message.get("id")
-    if not mid:
+    if mid is None or mid == "":
         mid = str(uuid.uuid4())
         message["id"] = mid
     return str(mid)

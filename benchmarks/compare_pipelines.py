@@ -18,6 +18,12 @@ from aiokafka.admin import AIOKafkaAdminClient, NewTopic
 ROOT = Path(__file__).resolve().parents[1]
 
 
+class IncompleteTrial(RuntimeError):
+    def __init__(self, reason, details):
+        super().__init__(reason)
+        self.details = details
+
+
 def percentile(values, q):
     return sorted(values)[min(len(values) - 1, int((len(values) - 1) * q))] if values else None
 
@@ -98,34 +104,114 @@ async def trial(args, engine, workload, repeat):
                     )
 
             publishing = asyncio.create_task(publish())
-            latencies, identifiers, dlq = [], [], 0
-            async with asyncio.timeout(args.timeout):
-                while len(set(identifiers)) < n:
-                    records = await output.getmany(timeout_ms=50)
-                    now = time.perf_counter()
-                    if process.poll() is not None:
-                        raise RuntimeError(f"Worker exited; inspect {log.name}")
-                    for batch in records.values():
-                        for record in batch:
-                            value = json.loads(record.value)
-                            if record.topic.endswith("-dlq"):
-                                dlq += 1
-                                continue
-                            if value["id"].startswith(phase + "-"):
-                                identifiers.append(value["id"])
-                                latencies.append((now - value["sent_at"]) * 1000)
-                await publishing
-                output_elapsed = time.perf_counter() - started
-                while True:
-                    actual = {tp: await offsets.committed(tp) for tp in expected}
-                    if all(
-                        actual[tp] is not None and actual[tp] >= off for tp, off in expected.items()
-                    ):
-                        break
-                    await asyncio.sleep(0.01)
+            latencies, identifiers, unique_ids, dlq = [], [], set(), 0
+            actual = {}
+            stage = "output"
+            output_elapsed = None
+            last_progress = last_report = started
+            previous_offsets = None
+
+            def diagnostics():
+                return {
+                    "benchmark_phase": phase,
+                    "stage": stage,
+                    "messages": n,
+                    "received": len(identifiers),
+                    "unique_received": len(unique_ids),
+                    "missing": n - len(unique_ids),
+                    "duplicates": len(identifiers) - len(unique_ids),
+                    "dlq": dlq,
+                    "elapsed_sec": time.perf_counter() - started,
+                    "output_elapsed_sec": output_elapsed,
+                    "expected_offsets": {
+                        f"{tp.topic}:{tp.partition}": off for tp, off in expected.items()
+                    },
+                    "observed_offsets": {
+                        f"{tp.topic}:{tp.partition}": off for tp, off in actual.items()
+                    },
+                }
+
+            def report_progress(now):
+                nonlocal last_report
+                if args.progress_interval > 0 and now - last_report >= args.progress_interval:
+                    print(
+                        json.dumps(
+                            {
+                                "progress": {
+                                    "engine": engine,
+                                    "workload": workload,
+                                    "repeat": repeat,
+                                    **diagnostics(),
+                                }
+                            }
+                        ),
+                        flush=True,
+                    )
+                    last_report = now
+
+            try:
+                async with asyncio.timeout(args.timeout):
+                    while len(unique_ids) < n:
+                        records = await output.getmany(timeout_ms=50)
+                        now = time.perf_counter()
+                        if process.poll() is not None:
+                            raise IncompleteTrial(
+                                f"Worker exited; inspect {log.name}", diagnostics()
+                            )
+                        if publishing.done() and not publishing.cancelled():
+                            error = publishing.exception()
+                            if error:
+                                raise IncompleteTrial(
+                                    f"Input publisher failed: {type(error).__name__}", diagnostics()
+                                ) from error
+                        before_count = len(unique_ids)
+                        for batch in records.values():
+                            for record in batch:
+                                value = json.loads(record.value)
+                                if record.topic.endswith("-dlq"):
+                                    dlq += 1
+                                    continue
+                                if value["id"].startswith(phase + "-"):
+                                    identifiers.append(value["id"])
+                                    unique_ids.add(value["id"])
+                                    latencies.append((now - value["sent_at"]) * 1000)
+                        if len(unique_ids) != before_count:
+                            last_progress = now
+                        report_progress(now)
+                        if now - last_progress >= args.stall_timeout:
+                            raise IncompleteTrial(
+                                "No new unique output within stall deadline", diagnostics()
+                            )
+                    await publishing
+                    output_elapsed = time.perf_counter() - started
+                    stage = "source_commit"
+                    last_progress = time.perf_counter()
+                    while True:
+                        actual = {tp: await offsets.committed(tp) for tp in expected}
+                        now = time.perf_counter()
+                        if all(
+                            actual[tp] is not None and actual[tp] >= off
+                            for tp, off in expected.items()
+                        ):
+                            break
+                        if actual != previous_offsets:
+                            previous_offsets = actual.copy()
+                            last_progress = now
+                        report_progress(now)
+                        if now - last_progress >= args.stall_timeout:
+                            raise IncompleteTrial(
+                                "No source commit progress within stall deadline", diagnostics()
+                            )
+                        await asyncio.sleep(0.01)
+            except TimeoutError as exc:
+                raise IncompleteTrial("Overall trial deadline exceeded", diagnostics()) from exc
+            finally:
+                if not publishing.done():
+                    publishing.cancel()
+                await asyncio.gather(publishing, return_exceptions=True)
             commit_elapsed = time.perf_counter() - started
             extra = await output.getmany(timeout_ms=100)
-            duplicates = len(identifiers) - len(set(identifiers))
+            duplicates = len(identifiers) - len(unique_ids)
             for batch in extra.values():
                 for record in batch:
                     value = json.loads(record.value)
@@ -141,7 +227,7 @@ async def trial(args, engine, workload, repeat):
                 "p95_ms": percentile(latencies, 0.95),
                 "p99_ms": percentile(latencies, 0.99),
                 "duplicates": duplicates,
-                "missing": n - len(set(identifiers)),
+                "missing": n - len(unique_ids),
                 "dlq": dlq,
             }
 
@@ -204,6 +290,7 @@ async def main(args):
                         "workload": workload,
                         "repeat": repeat,
                         "error": f"{type(exc).__name__}: {exc}",
+                        **getattr(exc, "details", {}),
                     }
                 results.append(result)
                 print(json.dumps(result), flush=True)
@@ -236,5 +323,17 @@ if __name__ == "__main__":
     p.add_argument("--partitions", type=int, default=4)
     p.add_argument("--concurrency", type=int, default=8)
     p.add_argument("--timeout", type=float, default=60)
+    p.add_argument(
+        "--stall-timeout",
+        type=float,
+        default=60,
+        help="Fail explicitly after this many seconds without new output/commit progress",
+    )
+    p.add_argument(
+        "--progress-interval",
+        type=float,
+        default=30,
+        help="Emit progress JSON periodically; zero disables it",
+    )
     p.add_argument("--output", default=str(ROOT / "benchmarks/results/pipelines.json"))
     asyncio.run(main(p.parse_args()))
