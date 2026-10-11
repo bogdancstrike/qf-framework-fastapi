@@ -390,10 +390,23 @@ Three repetitions per cell; all 48 final worker trials completed with no missing
 
 One original trial reached the 60-second deadline and is excluded from successful-trial medians; its cause was not isolated by the harness. The original ACK variant only changes output waiting, not its other reliability defects.
 
+### Speedup at 1,000 and 100,000 messages
+
+ACK-gated original versus native async, three repetitions per workload. Ratios divide median throughput; this is a one-stage synthetic workload on the documented local stack.
+
+| Workload | 1,000 messages | 100,000 messages |
+|---|---:|---:|
+| Identity | 4.64× | 1.99× |
+| 5 ms simulated I/O | 4.47× | 5.02× |
+| 32-record bulk | 9.34× | 8.30× |
+| 10% transient failures | 4.35× | 2.13× |
+
+All **24/24** large trials completed: **2.4 million** measured input-record instances, zero observed missing outputs, immediate duplicates or DLQ records. Retry paired-run gains varied from approximately **2.04× to 4.06×**; inspect the full report before treating its median as a stable multiplier. The stock original fire-and-forget path uses different completion semantics.
+
 <!-- SCALE_COMPARISON_START -->
 ## Processing 1,000 versus 100,000 messages
 
-In progress: 21 of 24 planned trials recorded. All 100,000-message numbers are preliminary until three repetitions per engine/workload finish.
+Complete: 24 of 24 attempted trials recorded.
 
 Same four partitions, eight worker jobs and three repetitions per engine/workload. The comparator is the **original ACK-gated harness variant**; it changes single-output waiting without repairing the original's other reliability defects. Output time measures the complete input burst to final observed output. Throughput is messages/second; higher is better. Time is seconds; lower is better.
 
@@ -406,7 +419,7 @@ Same four partitions, eight worker jobs and three repetitions per engine/workloa
 | 32-record bulk | 1,000 | 0.58 | 0.06 | 1,712.00 | 15,990.23 | 9.34× | 3/3 | 3/3 |
 | 32-record bulk | 100,000 | 49.70 | 5.99 | 2,012.00 | 16,707.12 | 8.30× | 3/3 | 3/3 |
 | 10% transient retry | 1,000 | 3.13 | 0.72 | 319.20 | 1,388.38 | 4.35× | 3/3 | 3/3 |
-| 10% transient retry | 100,000 | 290.18 | 71.57 | 344.61 | 1,397.14 | 4.05× | 1/1 | 2/2 |
+| 10% transient retry | 100,000 | 152.73 | 71.61 | 654.76 | 1,396.43 | 2.13× | 3/3 | 3/3 |
 
 Each cell is a median across successful trials. `0/0` means not yet attempted; failed attempts remain in the success counts and raw data. A ratio of 2.00× means twice the throughput, approximately half the elapsed time for the same count; a ratio below 1.00× favors Flask.
 
@@ -423,7 +436,7 @@ This separately waits until the broker reports source offsets committed through 
 | 32-record bulk | 1,000 | 0.61 | 0.07 | 1,651.10 | 14,313.64 |
 | 32-record bulk | 100,000 | 49.72 | 5.99 | 2,011.07 | 16,705.26 |
 | 10% transient retry | 1,000 | 3.13 | 0.73 | 319.15 | 1,374.37 |
-| 10% transient retry | 100,000 | 290.18 | 71.60 | 344.61 | 1,396.72 |
+| 10% transient retry | 100,000 | 152.73 | 71.64 | 654.76 | 1,395.80 |
 <!-- SCALE_COMPARISON_END -->
 
 ### HTTP · 1,000 requests per trial

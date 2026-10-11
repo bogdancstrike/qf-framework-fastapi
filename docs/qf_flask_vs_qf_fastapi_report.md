@@ -1,23 +1,27 @@
 # QF Flask/gevent versus QF FastAPI/asyncio
 
-Measurement date: 2026-10-11. Original source revision: `d54b3acae4b902e8715455bc9464ae11565ba739`. Successor: [qf-framework-fastapi](https://github.com/bogdancstrike/qf-framework-fastapi), distribution `qf-fastapi` 2.0.0. Final runtime benchmark code corresponds to checkpoint `4c5443e`; later endpoint-model, zero-ID validation and documentation changes do not alter the worker benchmark path. The original source was not modified.
+Measurement date: 2026-10-11. Original source revision: `d54b3acae4b902e8715455bc9464ae11565ba739`. Successor: [qf-framework-fastapi](https://github.com/bogdancstrike/qf-framework-fastapi), distribution `qf-fastapi` 2.0.0. The 1,000-message runtime benchmark corresponds to checkpoint `4c5443e`; the 100,000-message runtime/driver corresponds to `943ef18` (see its tracked provenance JSON); later endpoint-model, zero-ID validation and documentation changes do not alter the worker benchmark path. The original source was not modified.
 
 ## Management summary
 
 **Recommendation:** adopt the async framework for new pipeline work and migrate existing applications in stages. The strongest benefit is clearer failure recovery and observable operation. Performance improves in several tested workloads, but not in every workload or delivery mode.
 
-### Throughput: what the small test actually shows
+### Speed and processing time at both sizes
 
-Throughput means completed output messages per second. “4.64×” means the async implementation delivered 4.64 times as many messages per second as the named comparator in this test. It does not mean every production pipeline runs 4.64 times faster. These comparisons use the original ACK-gated benchmark variant, which waits for output acknowledgements.
+These ratios compare native async with the original **ACK-gated benchmark variant**, using four partitions, eight worker jobs and three repetitions. Higher throughput and lower processing time are better. All numbers below are medians; processing time ends when the benchmark observes the final output.
 
-| Workload, 1,000 messages | Original ACK msg/s | FastAPI async msg/s | Async / original | Practical interpretation |
-|---|---:|---:|---:|---|
-| Identity transformation | 301 | 1,397 | **4.64×** | More acknowledged throughput in this local test |
-| 5 ms simulated I/O per message | 298 | 1,331 | **4.47×** | More acknowledged throughput in this local test |
-| 32-record bulk jobs | 1,712 | 15,990 | **9.34×** | More acknowledged throughput in this local test |
-| 10% transient handler failures | 319 | 1,388 | **4.35×** | More acknowledged throughput in this local test |
+| Workload | Async gain at 1,000 | Async gain at 100,000 | Flask ACK time, 100,000 | Async time, 100,000 | Processing-time reduction |
+|---|---:|---:|---:|---:|---:|
+| Identity | **4.64×** | **1.99×** | 144.23 s | 72.34 s | 49.8% |
+| 5 ms simulated I/O | **4.47×** | **5.02×** | 376.17 s | 74.92 s | 80.1% |
+| 32-record bulk | **9.34×** | **8.30×** | 49.70 s | 5.99 s | 88.0% |
+| 10% transient failures | **4.35×** | **2.13×** | 152.73 s | 71.61 s | 53.1% |
 
-Each value is a three-run median with four Kafka partitions and eight worker jobs. All runs in this table completed. The stock original identity path reached 11,020 msg/s by returning before output ACK; that is a different reliability tradeoff. In the 5,000-record bulk follow-up, successful original ACK trials reached 18,202 msg/s versus async 14,136 msg/s: async was **22% slower**, and one of three original trials timed out. HTTP results are mixed; there is no demonstrated large HTTP speedup.
+**Answer to the scale question:** async remains faster in all four tested ACK-gated workloads, but the original small-test multipliers do not carry over unchanged. The I/O advantage grows; identity, bulk and retry gains are smaller. Identity's gain drops because original throughput rises from 301 to 693 msg/s while async remains near 1,400 msg/s.
+
+Retry is especially variable: the original's three runs took **290.18, 152.73 and 148.13 seconds**. Its median is valid for this sample, but it is not a stable universal capacity multiplier. See the paired-run ranges and all individual trials below. All **24 of 24** large trials completed: **2.4 million measured input-record instances**, zero observed missing outputs, immediate duplicates or DLQ records. This is normal-operation load evidence; separate crash/outage tests establish the documented recovery behavior.
+
+The stock original identity path reached 11,020 msg/s in the 1,000-message test by returning before output ACK, which is a different delivery tradeoff. Successful original 32-worker/5,000-message bulk trials also exceeded async throughput; one original trial timed out. HTTP differences were modest and mixed. The new framework is not faster in every mode/configuration.
 
 ### Resilience: what has been demonstrated
 
@@ -39,13 +43,15 @@ Each value is a three-run median with four Kafka partitions and eight worker job
 
 ### Larger validation: 100,000 messages
 
-The matched 100,000-message comparison is running with the same four workloads, four partitions and eight-worker concurrency, using `original_ack` and `async`, three repetitions each. Results will appear in `pipelines_100k.json` and a dedicated section below. **The 1,000-message ratios are not yet claims about 100,000 messages.** The driver now records whether incomplete runs stalled on output or source commits; deadlines and failed-trial counts will be reported explicitly.
+The completed 100,000-message comparison uses the same four workloads, four partitions and eight-worker concurrency, with `original_ack` and `async`, three repetitions each. The side-by-side processing-time, throughput and ratio tables below distinguish small-burst gains from sustained large-burst behavior and retain every incomplete trial.
 
 ## Findings and decision
 
 The successor preserves the worker/configuration/tracing conventions while making Kafka, Redis, handler backoff and application lifecycle asynchronous. It also changes delivery semantics: input completion now waits for every output or DLQ acknowledgement, and failed commit progress remains retryable. These correctness improvements matter more than a framework-name comparison.
 
-For the final 1,000-message, eight-job workload, native async throughput was approximately **4.64×** the original ACK-gated harness for identity, **4.47×** for 5 ms simulated I/O, **9.34×** for bulk, and **4.35×** for transient retries. These are ratios of three-trial medians on this host, not universal speedups. Stock original identity/retry paths were faster because single-message output completion returns before acknowledgement. Successful original large-bulk trials also exceeded the new runtime's throughput. HTTP differences were modest and mixed; increasing this driver's concurrency did not establish server capacity.
+At **100,000 messages**, native async throughput was **1.99×** the ACK-gated original for identity, **5.02×** for 5 ms simulated I/O, **8.30×** for bulk, and **2.13×** for transient retries. At **1,000 messages**, those ratios were **4.64×**, **4.47×**, **9.34×** and **4.35×** respectively. These are ratios of three-trial medians for one worker stage on this host, not universal framework speedups. The large retry comparator varied substantially, so its paired-run range is essential context.
+
+All 24 large trials completed with zero observed missing messages, immediate duplicates or DLQ output. Stock original identity/retry paths were faster in the small tests because single-message output completion returns before acknowledgement. Successful original 32-worker larger-bulk trials also exceeded the new runtime's throughput. HTTP differences were modest and mixed; increasing this driver's concurrency did not establish server capacity.
 
 The migration is justified for reviewable recovery boundaries, native async integrations, bounded memory exposure, explicit lifecycle and test coverage. It is not justified by a claim that FastAPI is always faster, or that producer idempotence delivers exactly-once business effects. Use the new framework for new async pipeline development, and migrate existing workers with application-specific correctness and deployment load checks.
 
@@ -119,7 +125,7 @@ The new sync path is close to native async for trivial work and bulk on this hos
 <!-- SCALE_COMPARISON_START -->
 ## Processing 1,000 versus 100,000 messages
 
-In progress: 21 of 24 planned trials recorded. All 100,000-message numbers are preliminary until three repetitions per engine/workload finish.
+Complete: 24 of 24 attempted trials recorded.
 
 Same four partitions, eight worker jobs and three repetitions per engine/workload. The comparator is the **original ACK-gated harness variant**; it changes single-output waiting without repairing the original's other reliability defects. Output time measures the complete input burst to final observed output. Throughput is messages/second; higher is better. Time is seconds; lower is better.
 
@@ -132,7 +138,7 @@ Same four partitions, eight worker jobs and three repetitions per engine/workloa
 | 32-record bulk | 1,000 | 0.58 | 0.06 | 1,712.00 | 15,990.23 | 9.34× | 3/3 | 3/3 |
 | 32-record bulk | 100,000 | 49.70 | 5.99 | 2,012.00 | 16,707.12 | 8.30× | 3/3 | 3/3 |
 | 10% transient retry | 1,000 | 3.13 | 0.72 | 319.20 | 1,388.38 | 4.35× | 3/3 | 3/3 |
-| 10% transient retry | 100,000 | 290.18 | 71.57 | 344.61 | 1,397.14 | 4.05× | 1/1 | 2/2 |
+| 10% transient retry | 100,000 | 152.73 | 71.61 | 654.76 | 1,396.43 | 2.13× | 3/3 | 3/3 |
 
 Each cell is a median across successful trials. `0/0` means not yet attempted; failed attempts remain in the success counts and raw data. A ratio of 2.00× means twice the throughput, approximately half the elapsed time for the same count; a ratio below 1.00× favors Flask.
 
@@ -149,36 +155,39 @@ This separately waits until the broker reports source offsets committed through 
 | 32-record bulk | 1,000 | 0.61 | 0.07 | 1,651.10 | 14,313.64 |
 | 32-record bulk | 100,000 | 49.72 | 5.99 | 2,011.07 | 16,705.26 |
 | 10% transient retry | 1,000 | 3.13 | 0.73 | 319.15 | 1,374.37 |
-| 10% transient retry | 100,000 | 290.18 | 71.60 | 344.61 | 1,396.72 |
+| 10% transient retry | 100,000 | 152.73 | 71.64 | 654.76 | 1,395.80 |
 
 ### Does the small-test advantage hold at 100,000 messages?
 
-| Workload | 1,000-message ratio | 100,000-message ratio | Interpretation |
-| --- | --- | --- | --- |
-| Identity | 4.64× | 1.99× | Async remains faster; advantage is smaller at scale |
-| 5 ms I/O / message | 4.47× | 5.02× | Small-test advantage retained or increased |
-| 32-record bulk | 9.34× | 8.30× | Async remains faster; advantage is smaller at scale |
-| 10% transient retry | 4.35× | 4.05× | Preliminary; repetitions still running |
+| Workload | 1,000-message ratio | 100,000-message ratio | 100k paired-run range | Interpretation |
+| --- | --- | --- | --- | --- |
+| Identity | 4.64× | 1.99× | 1.97–2.00× | Async remains faster; advantage is smaller at scale |
+| 5 ms I/O / message | 4.47× | 5.02× | 5.02–5.17× | Small-test advantage retained or increased |
+| 32-record bulk | 9.34× | 8.30× | 8.01–8.32× | Async remains faster; advantage is smaller at scale |
+| 10% transient retry | 4.35× | 2.13× | 2.04–4.06× | Async remains faster; advantage is smaller at scale |
 
 Identity's relative gain falls because original throughput rises from 301 to 693 msg/s, while async stays near 1,397 to 1,382 msg/s. A smaller ratio therefore does not mean async throughput collapsed; the original benefits more from the larger burst.
 
 
+Ratios above divide throughput medians. The paired-run range separately divides the async and original rates within each repetition; it is an observed range, not a statistical confidence interval. A wide range limits how confidently a single multiplier can be extrapolated.
+
+
 ### 100,000-message latency and process resources
 
-| Workload | Engine | Passed/attempted | p50 ms | p95 ms | p99 ms | CPU s | RSS MiB |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Identity | original_ack | 3/3 | 68,160.79 | 129,493.29 | 137,688.09 | 89.95 | 63.74 |
-| Identity | async | 3/3 | 34,673.04 | 65,902.93 | 68,650.39 | 15.65 | 123.23 |
-| 5 ms I/O / message | original_ack | 3/3 | 195,005.14 | 354,668.16 | 369,538.09 | 56.11 | 64.61 |
-| 5 ms I/O / message | async | 3/3 | 36,030.95 | 68,318.88 | 71,232.12 | 15.85 | 124.53 |
-| 32-record bulk | original_ack | 3/3 | 9,457.35 | 42,217.84 | 45,347.18 | 14.77 | 66.21 |
-| 32-record bulk | async | 3/3 | 1,342.49 | 2,532.41 | 2,869.48 | 3.10 | 87.27 |
-| 10% transient retry | original_ack | 1/1 | 149,005.36 | 271,434.82 | 285,837.63 | 125.95 | 65.83 |
-| 10% transient retry | async | 2/2 | 34,316.74 | 65,193.38 | 67,967.75 | 25.26 | 121.59 |
+| Workload | Engine | Passed/attempted | Throughput range msg/s | p50 ms | p95 ms | p99 ms | CPU s | RSS MiB |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Identity | original_ack | 3/3 | 692.82–701.94 | 68,160.79 | 129,493.29 | 137,688.09 | 89.95 | 63.74 |
+| Identity | async | 3/3 | 1,379.77–1,382.72 | 34,673.04 | 65,902.93 | 68,650.39 | 15.65 | 123.23 |
+| 5 ms I/O / message | original_ack | 3/3 | 248.12–266.32 | 195,005.14 | 354,668.16 | 369,538.09 | 56.11 | 64.61 |
+| 5 ms I/O / message | async | 3/3 | 1,283.30–1,340.70 | 36,030.95 | 68,318.88 | 71,232.12 | 15.85 | 124.53 |
+| 32-record bulk | original_ack | 3/3 | 1,903.02–2,086.77 | 9,457.35 | 42,217.84 | 45,347.18 | 14.77 | 66.21 |
+| 32-record bulk | async | 3/3 | 15,686.31–16,733.03 | 1,342.49 | 2,532.41 | 2,869.48 | 3.10 | 87.27 |
+| 10% transient retry | original_ack | 3/3 | 344.61–675.10 | 78,393.73 | 138,824.06 | 148,504.85 | 105.50 | 64.79 |
+| 10% transient retry | async | 3/3 | 1,375.37–1,397.86 | 34,352.86 | 65,197.36 | 67,985.05 | 25.01 | 121.83 |
 
 ### Completion and resilience observations
 
-21 completed 100,000-message trials and 0 incomplete attempts are currently recorded. Completed trials contain 0 missing outputs, 0 immediate duplicates and 0 DLQ records. This is happy-path stress evidence; it does not replace the separate crash/outage tests.
+24 completed 100,000-message trials and 0 incomplete attempts are currently recorded. Completed trials contain 0 missing outputs, 0 immediate duplicates and 0 DLQ records. This is happy-path stress evidence; it does not replace the separate crash/outage tests.
 
 The large-run driver uses incremental unique-ID tracking to avoid repeated large set reconstruction. The payload, workers and measurement boundaries are unchanged; it also emits progress and records explicit output/source-commit stall diagnostics. Per-phase overall deadline is 900 seconds; no-progress deadline is 60 seconds. Execution order alternates across repetitions. Warmup is 128 records, excluded from measurement. Single broker, loopback transport and finite bursts remain the main experimental limits.
 
@@ -340,7 +349,7 @@ python -m build
 
 Original benchmark processes require the sibling framework's `.venv` with its dependencies and gevent. `--original-root` can override its location. Changing defaults or using another checkout requires recording new source revisions and environment snapshots. The original raw datasets are retained; do not overwrite them when comparing another machine.
 
-Artifact index: [final pipelines](../benchmarks/results/pipelines.json), [initial scale](../benchmarks/results/pipelines_scale.json), [tuned bulk](../benchmarks/results/pipelines_bulk_tuned.json), [HTTP](../benchmarks/results/http.json), [original defect probes](../benchmarks/results/original_probes.json), [validation](../benchmarks/results/validation.json), [Jaeger proof](../benchmarks/results/jaeger_verification.json). Specifications, architecture and operations are maintained in this repository alongside the report. The canonical comparison is also copied to the requested parent workspace location.
+Artifact index: [1,000-message pipelines](../benchmarks/results/pipelines.json), [100,000-message pipelines](../benchmarks/results/pipelines_100k.json), [100k provenance](../benchmarks/results/pipelines_100k_provenance.json), [initial scale](../benchmarks/results/pipelines_scale.json), [tuned bulk](../benchmarks/results/pipelines_bulk_tuned.json), [HTTP](../benchmarks/results/http.json), [original defect probes](../benchmarks/results/original_probes.json), [validation](../benchmarks/results/validation.json), [Jaeger proof](../benchmarks/results/jaeger_verification.json). Specifications, architecture and operations are maintained in this repository alongside the report. The canonical comparison is also copied to the requested parent workspace location.
 
 ## Design references
 

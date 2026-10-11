@@ -77,9 +77,9 @@ Status is updated as work is implemented and verified. A checked item means its 
 
 Completed checkboxes describe implemented artifacts and executed checks, not universal delivery/performance guarantees. `benchmarks/results/validation.json` records final local checks; GitHub Actions records Python 3.11/3.12/3.13 checks and live-service validation. Reports retain historical measurements and timeouts. Unexecuted production-specific validation: multi-broker failover, Redis node/data loss, TLS/SASL end-to-end, sustained multi-hour soak, independent load generator and application business effects. These remain deployment acceptance tasks, not silently passing checks.
 
-## Requested scale follow-up (in progress)
+## Requested scale follow-up (completed)
 
-- [ ] Run 100,000-message matched ACK-original/native-async comparisons: four workloads, eight jobs, four partitions, three repetitions.
-- [ ] Update both report copies and README with completed-trial ratios, source-commit throughput, latency and failure evidence.
+- [x] Run 100,000-message matched ACK-original/native-async comparisons: four workloads, eight jobs, four partitions, three repetitions.
+- [x] Update both report copies and README with completed-trial ratios, source-commit throughput, latency and failure evidence.
 - [x] Add explicit output-versus-source-commit stall diagnostics and periodic progress to the benchmark driver.
 - [x] Add management summary distinguishing throughput gains, resilience evidence and deployment limitations.

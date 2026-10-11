@@ -37,5 +37,21 @@
     "TLS/SASL live integration",
     "multi-hour soak",
     "production business payload/effect testing"
-  ]
+  ],
+  "large_benchmark": {
+    "messages_per_trial": 100000,
+    "attempted": 24,
+    "completed": 24,
+    "measured_input_record_instances": 2400000,
+    "missing": 0,
+    "duplicates": 0,
+    "dlq": 0,
+    "native_async_vs_original_ack_ratios": {
+      "noop": 1.9938847980520278,
+      "io": 5.020852603008729,
+      "bulk": 8.303740414999961,
+      "retry": 2.1327209765926045
+    },
+    "note": "Retry original has high run-to-run variation; see paired ranges. Historical 5k datasets retain their timeout failures."
+  }
 }

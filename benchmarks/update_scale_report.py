@@ -142,11 +142,33 @@ def render(small, large, details=False):
                 verdict = "Async remains faster; advantage is smaller at scale"
             else:
                 verdict = "Small-test advantage does not hold"
+            by_repeat = {
+                engine: {t["repeat"]: t for t in data[100000][workload, engine] if "error" not in t}
+                for engine in ENGINES
+            }
+            paired = [
+                by_repeat["async"][repeat]["messages_per_sec"] / trial["messages_per_sec"]
+                for repeat, trial in by_repeat["original_ack"].items()
+                if repeat in by_repeat["async"]
+            ]
+            observed = f"{min(paired):.2f}–{max(paired):.2f}×" if paired else "—"
             ratio_rows.append(
-                [label, fmt(old) + "×", fmt(new) + "×" if new is not None else "—", verdict]
+                [
+                    label,
+                    fmt(old) + "×",
+                    fmt(new) + "×" if new is not None else "—",
+                    observed,
+                    verdict,
+                ]
             )
         text += markdown_table(
-            ["Workload", "1,000-message ratio", "100,000-message ratio", "Interpretation"],
+            [
+                "Workload",
+                "1,000-message ratio",
+                "100,000-message ratio",
+                "100k paired-run range",
+                "Interpretation",
+            ],
             ratio_rows,
         )
         if (
@@ -164,14 +186,18 @@ def render(small, large, details=False):
                 "not mean async throughput collapsed; the original benefits more from the larger burst.\n"
             )
 
+        text += "\n\nRatios above divide throughput medians. The paired-run range separately divides the async and original rates within each repetition; it is an observed range, not a statistical confidence interval. A wide range limits how confidently a single multiplier can be extrapolated.\n"
         text += "\n\n### 100,000-message latency and process resources\n\n"
         detail_rows = []
         for (workload, engine), trials in data[100000].items():
+            rates = [t["messages_per_sec"] for t in trials if "error" not in t]
+            rate_range = f"{min(rates):,.2f}–{max(rates):,.2f}" if rates else "—"
             detail_rows.append(
                 [
                     WORKLOADS[workload],
                     engine,
                     passed(trials),
+                    rate_range,
                     fmt(median(trials, "p50_ms")),
                     fmt(median(trials, "p95_ms")),
                     fmt(median(trials, "p99_ms")),
@@ -184,6 +210,7 @@ def render(small, large, details=False):
                 "Workload",
                 "Engine",
                 "Passed/attempted",
+                "Throughput range msg/s",
                 "p50 ms",
                 "p95 ms",
                 "p99 ms",
