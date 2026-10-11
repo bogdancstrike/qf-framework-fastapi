@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+import math
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Dict, List, Optional, Literal
 
@@ -120,7 +121,9 @@ def register_worker(spec: WorkerSpec) -> None:
             raise ValueError(f"Worker '{spec.name}': batch_timeout_ms must be >= 1")
 
     if spec.kind == "aggregator":
-        if not spec.aggregate_by:
+        if spec.bulk_mode:
+            raise ValueError("Aggregator workers cannot use bulk_mode")
+        if not isinstance(spec.aggregate_by, str) or not all(spec.aggregate_by.split(".")):
             raise ValueError(f"Aggregator '{spec.name}' must define aggregate_by (e.g. 'id')")
         if len(spec.topics_in) < 2:
             raise ValueError(f"Aggregator '{spec.name}' must define 2+ topics_in")
@@ -146,9 +149,13 @@ def worker_for_topic(topic: str) -> Optional[WorkerSpec]:
 def compute_aggregate_key(spec: WorkerSpec, message: dict) -> str:
     if spec.aggregate_by:
         v = _get_by_path(message, spec.aggregate_by)
-        if v is not None:
+        if (
+            isinstance(v, (str, int, float, bool))
+            and v != ""
+            and not (isinstance(v, float) and not math.isfinite(v))
+        ):
             return str(v)
-    raise ValueError(f"Missing aggregation key: {spec.aggregate_by}")
+    raise ValueError(f"Missing or invalid aggregation key: {spec.aggregate_by}")
 
 
 def kafka_handler(
@@ -161,7 +168,16 @@ def kafka_handler(
     bulk_mode: bool = False,
     batch_size: int = 50,
     batch_timeout_ms: int = 200,
+    aggregator: bool = False,
+    aggregate_by: Optional[str] = None,
+    aggregator_timeout_sec: int = 600,
 ):
+    """Register a normal worker or a correlation join.
+
+    `aggregator=True` defaults the join key to `id`. Supplying `aggregate_by`
+    also selects aggregation; dotted paths are supported.
+    """
+
     def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
         # Read policies from anywhere in wrapper chain
         retry_cfg = _get_attr_anywhere(fn, "_qsint_retry_to_dlq")
@@ -170,7 +186,7 @@ def kafka_handler(
 
         register_worker(
             WorkerSpec(
-                kind="handler",
+                kind="aggregator" if aggregator or aggregate_by is not None else "handler",
                 name=name,
                 topics_in=list(topics_in),
                 topics_out=list(topics_out),
@@ -182,6 +198,10 @@ def kafka_handler(
                 bulk_mode=bool(bulk_mode),
                 batch_size=int(batch_size),
                 batch_timeout_ms=int(batch_timeout_ms),
+                aggregate_by=aggregate_by
+                if aggregate_by is not None
+                else ("id" if aggregator else None),
+                aggregator_timeout_sec=int(aggregator_timeout_sec),
                 fn=fn,
             )
         )
@@ -207,33 +227,14 @@ def kafka_aggregator(
     metadatas: Optional[Dict[str, Any]] = None,
     max_workers: int = 4,
 ):
-    def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
-        retry_cfg = _get_attr_anywhere(fn, "_qsint_retry_to_dlq")
-        cb_cfg = _get_attr_anywhere(fn, "_qsint_circuit_breaker")
-        rl_cfg = _get_attr_anywhere(fn, "_qsint_rate_limit")
-
-        register_worker(
-            WorkerSpec(
-                kind="aggregator",
-                name=name,
-                topics_in=list(topics_in),
-                topics_out=list(topics_out),
-                metadatas=dict(metadatas or {}),
-                max_workers=int(max_workers),
-                retry_to_dlq=retry_cfg,
-                circuit_breaker=cb_cfg,
-                rate_limit=rl_cfg,
-                aggregate_by=str(aggregate_by),
-                aggregator_timeout_sec=int(aggregator_timeout_sec),
-                fn=fn,
-            )
-        )
-
-        try:
-            setattr(fn, "_qsint_worker_name", name)
-        except Exception:
-            pass
-
-        return fn
-
-    return deco
+    """Compatibility spelling for `kafka_handler(aggregator=True, ...)`."""
+    return kafka_handler(
+        name=name,
+        topics_in=topics_in,
+        topics_out=topics_out,
+        aggregator=True,
+        aggregate_by=aggregate_by,
+        aggregator_timeout_sec=aggregator_timeout_sec,
+        metadatas=metadatas,
+        max_workers=max_workers,
+    )

@@ -8,6 +8,7 @@ import functools
 import inspect
 import json
 import random
+import uuid
 
 from opentelemetry import trace
 from opentelemetry.trace import Link, SpanKind
@@ -15,6 +16,7 @@ from opentelemetry.trace import Link, SpanKind
 from ..commons.logger import logger
 from ..decorators.kafka_workers import compute_aggregate_key
 from ..tracing import get_tracer, inject_trace_headers, extract_context_from_headers
+from ..streams.delivery import AckPublisher, Publication
 
 
 class DeliveryError(RuntimeError):
@@ -30,11 +32,14 @@ class Processor:
         self.settings, self.producer, self.metrics = settings, producer, metrics
         self.executors = executors or {}
         self.aggregation = aggregation
+        self.publisher = AckPublisher(
+            producer, metrics, self.transport, settings.output_ack_timeout_sec
+        )
         self.deduplicator = None
         if settings.idempotency_enabled:
             from ..redis.idempotency import SourceDeduplicator
 
-            self.deduplicator = SourceDeduplicator(aggregation, self.transport)
+            self.deduplicator = SourceDeduplicator(aggregation, self.transport, metrics)
 
     async def delay(self, attempt):
         await asyncio.sleep(
@@ -100,43 +105,30 @@ class Processor:
                 (json.dumps(value, separators=(",", ":"), allow_nan=False).encode(), key)
             )
 
-        async def send_all():
-            self.check(valid)
-            futures = []
-            spans = []
-            try:
-                for body, key in encoded:
-                    for topic in spec.topics_out:
-                        self.check(valid)
-                        if key in sources:
-                            span = get_tracer().start_span(
-                                f"kafka.publish {topic}",
-                                context=extract_context_from_headers(sources[key]),
-                                kind=SpanKind.PRODUCER,
-                                links=[Link(batch_context)],
-                            )
-                            spans.append(span)
-                            with trace.use_span(span, end_on_exit=False):
-                                futures.append(
-                                    await self.producer.send(
-                                        topic, body, key=key, headers=inject_trace_headers()
-                                    )
-                                )
-                        else:
-                            futures.append(
-                                await self.producer.send(
-                                    topic, body, key=key, headers=inject_trace_headers()
-                                )
-                            )
-                if futures:
-                    await asyncio.gather(*futures)
-            finally:
-                for span in spans:
-                    span.end()
-
-        await self.transport(
-            lambda: asyncio.wait_for(send_all(), self.settings.output_ack_timeout_sec), spec.name
-        )
+        publications, spans = [], []
+        headers = inject_trace_headers()
+        try:
+            for body, key in encoded:
+                for topic in spec.topics_out:
+                    if key in sources:
+                        span = get_tracer().start_span(
+                            f"kafka.publish {topic}",
+                            context=extract_context_from_headers(sources[key]),
+                            kind=SpanKind.PRODUCER,
+                            links=[Link(batch_context)],
+                        )
+                        spans.append(span)
+                        with trace.use_span(span, end_on_exit=False):
+                            outgoing_headers = inject_trace_headers()
+                    else:
+                        outgoing_headers = headers
+                    publications.append(Publication(topic, body, key, outgoing_headers))
+            await self.publisher.publish(
+                publications, spec.name, "output", lambda: self.check(valid)
+            )
+        finally:
+            for span in spans:
+                span.end()
 
     @staticmethod
     def dlq_headers(record):
@@ -152,40 +144,35 @@ class Processor:
     async def dlq(self, spec, records, error, attempts, valid, *, aggregate=None):
         topic = spec.retry_to_dlq.dlq_topic if spec.retry_to_dlq else self.settings.error_topic
 
-        async def send_all():
-            futures = []
-            for record in records:
-                self.check(valid)
-                envelope = {
-                    "id": f"{record.topic}:{record.partition}:{record.offset}",
-                    "source": {
-                        "topic": record.topic,
-                        "partition": record.partition,
-                        "offset": record.offset,
-                        "key_base64": base64.b64encode(record.key).decode()
-                        if record.key is not None
-                        else None,
-                    },
-                    "worker": spec.name,
-                    "attempts": attempts,
-                    "error": {"type": type(error).__name__},
-                    "raw_base64": base64.b64encode(record.value or b"").decode(),
-                }
-                if aggregate is not None:
-                    envelope["aggregate"] = aggregate
-                futures.append(
-                    await self.producer.send(
-                        topic,
-                        json.dumps(envelope).encode(),
-                        key=record.key,
-                        headers=self.dlq_headers(record),
-                    )
+        publications = []
+        for record in records:
+            self.check(valid)
+            envelope = {
+                "id": f"{record.topic}:{record.partition}:{record.offset}",
+                "source": {
+                    "topic": record.topic,
+                    "partition": record.partition,
+                    "offset": record.offset,
+                    "key_base64": base64.b64encode(record.key).decode()
+                    if record.key is not None
+                    else None,
+                },
+                "worker": spec.name,
+                "attempts": attempts,
+                "error": {"type": type(error).__name__},
+                "raw_base64": base64.b64encode(record.value or b"").decode(),
+            }
+            if aggregate is not None:
+                envelope["aggregate"] = aggregate
+            publications.append(
+                Publication(
+                    topic,
+                    json.dumps(envelope).encode(),
+                    record.key,
+                    self.dlq_headers(record),
                 )
-            await asyncio.gather(*futures)
-
-        await self.transport(
-            lambda: asyncio.wait_for(send_all(), self.settings.output_ack_timeout_sec), spec.name
-        )
+            )
+        await self.publisher.publish(publications, spec.name, "dlq", lambda: self.check(valid))
         self.metrics.processed.labels(spec.name, "dlq").inc(len(records))
         logger.warning(
             "Input routed to DLQ",
@@ -204,8 +191,11 @@ class Processor:
         if self.deduplicator and spec.kind != "aggregator":
             async with self.deduplicator.filter(spec, records, valid) as selection:
                 selected, owned = selection
+                if len(selected) < len(records):
+                    self.metrics.processed.labels(spec.name, "duplicate").inc(
+                        len(records) - len(selected)
+                    )
                 if not selected:
-                    self.metrics.processed.labels(spec.name, "duplicate").inc(len(records))
                     return True
                 return await self._handle(spec, selected, owned)
         return await self._handle(spec, records, valid)
@@ -235,7 +225,9 @@ class Processor:
                         value = json.loads(record.value)
                         if not isinstance(value, dict):
                             raise ValueError("Kafka payload must be a JSON object")
-                        if value.get("id") is None or value["id"] == "":
+                        if (value.get("id") is None or value["id"] == "") and not (
+                            spec.kind == "aggregator" and spec.aggregate_by == "id"
+                        ):
                             value["id"] = f"{record.topic}:{record.partition}:{record.offset}"
                     except (ValueError, TypeError, UnicodeError) as exc:
                         await self.dlq(spec, [record], exc, 0, valid)
@@ -278,17 +270,20 @@ class Processor:
         except ValueError as exc:
             await self.dlq(spec, [record], exc, 0, valid)
             return False
-        claim = await self.transport(
-            lambda: self.aggregation.claim(spec, key, record.topic, payload), spec.name
-        )
-        while claim.status == "busy":
+        token = uuid.uuid4().hex
+        while True:
             self.check(valid)
-            await asyncio.sleep(0.05)
             claim = await self.transport(
-                lambda: self.aggregation.claim(spec, key, record.topic, payload), spec.name
+                lambda: self.aggregation.claim(spec, key, record.topic, payload, token=token),
+                spec.name,
             )
+            self.metrics.aggregate_parts.labels(spec.name, claim.status).inc()
+            if claim.status != "busy":
+                break
+            await asyncio.sleep(0.05)
         if claim.status != "ready":
-            self.metrics.processed.labels(spec.name, "aggregate_stored").inc()
+            outcome = "aggregate_duplicate" if claim.status == "done" else "aggregate_stored"
+            self.metrics.processed.labels(spec.name, outcome).inc()
             return
         try:
             async with self.aggregation.heartbeat(claim):
@@ -302,4 +297,7 @@ class Processor:
                     lambda: self.aggregation.finish(claim, spec.aggregator_timeout_sec), spec.name
                 )
         finally:
-            await self.aggregation.release(claim)
+            try:
+                await self.aggregation.release(claim)
+            except Exception:
+                logger.warning("Aggregate claim cleanup failed; lease will expire")

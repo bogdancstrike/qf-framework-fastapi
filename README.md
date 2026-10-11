@@ -224,14 +224,14 @@ Batches stay within one source partition. Quiet partitions flush partial batches
 ### Join two topics through Redis
 
 ```python
-from framework.decorators import kafka_aggregator
+from framework.decorators import kafka_handler
 
 
-@kafka_aggregator(
+@kafka_handler(
     name="merge",
+    aggregator=True,
     topics_in=["result.a", "result.b"],
     topics_out=["events.complete"],
-    aggregate_by="id",
     aggregator_timeout_sec=300,
     max_workers=8,
 )
@@ -240,6 +240,8 @@ async def merge(message, consumer_name, metadatas):
 ```
 
 Publish `{"id":"job-42","a":true}` to `result.a` and `{"id":"job-42","b":true}` to `result.b`. The handler receives their merged object once the correlation is complete. Merge precedence follows `topics_in` order; later topics win conflicts. Renewable token-checked claims serialize ownership, and completion tombstones suppress repeated correlations within the timeout window. Redis durability and expiry determine the recovery boundary.
+
+Aggregation defaults to `id`. Set `aggregate_by="order.id"` for a dotted key path; supplying `aggregate_by` also enables aggregation. The existing `@kafka_aggregator` spelling remains supported. Bulk mode cannot be combined with aggregation, and missing/empty/non-scalar join keys go to diagnostic DLQ.
 
 ### Keep a synchronous integration
 

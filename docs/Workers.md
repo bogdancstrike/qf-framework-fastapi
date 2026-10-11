@@ -133,6 +133,8 @@ Stable input/output IDs preserve per-source trace lineage. New or changed IDs us
 
 ## Fanout and correlation joins
 
+Use `@kafka_handler(aggregator=True, ...)` to join on `id`, or specify `aggregate_by="order.id"` directly to enable aggregation with a custom dotted path. `@kafka_aggregator` remains a compatibility wrapper with the same behavior. Aggregation and bulk mode are mutually exclusive. Correlation values must be nonempty scalar strings/numbers/booleans; nonfinite numbers, containers and missing/null keys go to diagnostic DLQ. A missing default join ID is never replaced with unrelated source coordinates.
+
 Multiple output topics fan out the **same returned objects**; the decorator is not a conditional router. To route conditionally, use a downstream filtering stage or implement an application-owned publisher with an explicit delivery contract.
 
 ```python
@@ -180,7 +182,7 @@ These decorators attach runtime metadata; directly calling the Python function d
 
 Rate limits count admitted **jobs**, including bulk jobs, per worker process. They are not distributed quotas; three replicas can admit roughly three times the configured process rate. Circuit state is also local. A job that exhausts handler attempts and reaches DLQ counts as failure for circuit recovery; short transient failures resolved within a successful job do not each count as separate failed jobs. Function-level `call_retry`, `call_rate_limit` and `call_circuit_breaker` wrap actual calls and have their own arguments; do not assume the same semantics as worker metadata decorators.
 
-There is no generic handler execution deadline setting. Set deadlines on external calls or wrap your own operation in `asyncio.timeout()`. Cancellation should propagate; do not swallow `CancelledError`. Output/Redis transport retries have a separate budget and do not normally rerun successful user code, but partial acknowledgements can still produce duplicates when a multi-output transport attempt is retried.
+There is no generic handler execution deadline setting. Set deadlines on external calls or wrap your own operation in `asyncio.timeout()`. Cancellation should propagate; do not swallow `CancelledError`. Output/Redis transport retries have a separate budget and do not normally rerun successful user code. Kafka delivery tracks each receipt: confirmed outputs are skipped on retry, while pending ACK futures survive timeout and are awaited again. Failed receipts may be submitted again; process crashes and ambiguous transport failures can still duplicate delivery.
 
 ## Choosing idempotency boundaries
 

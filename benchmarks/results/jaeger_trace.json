@@ -1,263 +1,18 @@
 {
-  "traceID": "41cb43618db5292312a1244651933f87",
+  "traceID": "1fc7f43855d4c501050f625c7675fdd5",
   "spans": [
     {
-      "traceID": "41cb43618db5292312a1244651933f87",
-      "spanID": "2d4736860e53d7d8",
-      "operationName": "fastapi.serialization",
-      "references": [
-        {
-          "refType": "CHILD_OF",
-          "traceID": "41cb43618db5292312a1244651933f87",
-          "spanID": "e70542d8fc826c73"
-        }
-      ],
-      "startTime": 1791744274553292,
-      "duration": 15,
-      "tags": [
-        {
-          "key": "code.function.name",
-          "type": "string",
-          "value": "__main__.publish"
-        },
-        {
-          "key": "internal.span.format",
-          "type": "string",
-          "value": "otlp"
-        },
-        {
-          "key": "otel.scope.name",
-          "type": "string",
-          "value": "fastapi"
-        },
-        {
-          "key": "otel.scope.version",
-          "type": "string",
-          "value": "0.143.0"
-        },
-        {
-          "key": "span.kind",
-          "type": "string",
-          "value": "internal"
-        }
-      ],
-      "logs": [],
-      "processID": "p1",
-      "warnings": null
-    },
-    {
-      "traceID": "41cb43618db5292312a1244651933f87",
-      "spanID": "e70542d8fc826c73",
-      "operationName": "POST /publish",
-      "references": [],
-      "startTime": 1791744274552389,
-      "duration": 1032,
-      "tags": [
-        {
-          "key": "http.response.status_code",
-          "type": "int64",
-          "value": 200
-        },
-        {
-          "key": "internal.span.format",
-          "type": "string",
-          "value": "otlp"
-        },
-        {
-          "key": "otel.scope.name",
-          "type": "string",
-          "value": "framework"
-        },
-        {
-          "key": "span.kind",
-          "type": "string",
-          "value": "internal"
-        }
-      ],
-      "logs": [],
-      "processID": "p1",
-      "warnings": null
-    },
-    {
-      "traceID": "41cb43618db5292312a1244651933f87",
-      "spanID": "2701af79cfbed171",
-      "operationName": "application.merge",
-      "references": [
-        {
-          "refType": "CHILD_OF",
-          "traceID": "41cb43618db5292312a1244651933f87",
-          "spanID": "7a061ecbbbb7eb20"
-        }
-      ],
-      "startTime": 1791744274561151,
-      "duration": 5,
-      "tags": [
-        {
-          "key": "internal.span.format",
-          "type": "string",
-          "value": "otlp"
-        },
-        {
-          "key": "otel.scope.name",
-          "type": "string",
-          "value": "framework"
-        },
-        {
-          "key": "span.kind",
-          "type": "string",
-          "value": "internal"
-        }
-      ],
-      "logs": [],
-      "processID": "p2",
-      "warnings": null
-    },
-    {
-      "traceID": "41cb43618db5292312a1244651933f87",
-      "spanID": "7a061ecbbbb7eb20",
-      "operationName": "kafka.process qf-trace-38853860fc8b-join-b",
-      "references": [
-        {
-          "refType": "CHILD_OF",
-          "traceID": "41cb43618db5292312a1244651933f87",
-          "spanID": "ae13db255302b1ed"
-        }
-      ],
-      "startTime": 1791744274560951,
-      "duration": 903,
-      "tags": [
-        {
-          "key": "internal.span.format",
-          "type": "string",
-          "value": "otlp"
-        },
-        {
-          "key": "messaging.batch.message_count",
-          "type": "int64",
-          "value": 1
-        },
-        {
-          "key": "otel.scope.name",
-          "type": "string",
-          "value": "framework"
-        },
-        {
-          "key": "span.kind",
-          "type": "string",
-          "value": "consumer"
-        },
-        {
-          "key": "worker.name",
-          "type": "string",
-          "value": "merge"
-        }
-      ],
-      "logs": [],
-      "processID": "p2",
-      "warnings": null
-    },
-    {
-      "traceID": "41cb43618db5292312a1244651933f87",
-      "spanID": "ae13db255302b1ed",
-      "operationName": "kafka.process qf-trace-38853860fc8b-b",
-      "references": [
-        {
-          "refType": "CHILD_OF",
-          "traceID": "41cb43618db5292312a1244651933f87",
-          "spanID": "884d936ca30d9c1d"
-        }
-      ],
-      "startTime": 1791744274559254,
-      "duration": 809,
-      "tags": [
-        {
-          "key": "internal.span.format",
-          "type": "string",
-          "value": "otlp"
-        },
-        {
-          "key": "messaging.batch.message_count",
-          "type": "int64",
-          "value": 1
-        },
-        {
-          "key": "otel.scope.name",
-          "type": "string",
-          "value": "framework"
-        },
-        {
-          "key": "span.kind",
-          "type": "string",
-          "value": "consumer"
-        },
-        {
-          "key": "worker.name",
-          "type": "string",
-          "value": "b"
-        }
-      ],
-      "logs": [],
-      "processID": "p3",
-      "warnings": [
-        "clock skew adjustment disabled; not applying calculated delta of -3.382994ms"
-      ]
-    },
-    {
-      "traceID": "41cb43618db5292312a1244651933f87",
-      "spanID": "884d936ca30d9c1d",
-      "operationName": "kafka.process qf-trace-38853860fc8b-in",
-      "references": [
-        {
-          "refType": "CHILD_OF",
-          "traceID": "41cb43618db5292312a1244651933f87",
-          "spanID": "1c5adbfd6efe73ff"
-        }
-      ],
-      "startTime": 1791744274553796,
-      "duration": 4960,
-      "tags": [
-        {
-          "key": "internal.span.format",
-          "type": "string",
-          "value": "otlp"
-        },
-        {
-          "key": "messaging.batch.message_count",
-          "type": "int64",
-          "value": 1
-        },
-        {
-          "key": "otel.scope.name",
-          "type": "string",
-          "value": "framework"
-        },
-        {
-          "key": "span.kind",
-          "type": "string",
-          "value": "consumer"
-        },
-        {
-          "key": "worker.name",
-          "type": "string",
-          "value": "fanout"
-        }
-      ],
-      "logs": [],
-      "processID": "p1",
-      "warnings": null
-    },
-    {
-      "traceID": "41cb43618db5292312a1244651933f87",
-      "spanID": "90fe97902f3647cd",
+      "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+      "spanID": "57cd144e8c577c64",
       "operationName": "fastapi.dependencies",
       "references": [
         {
           "refType": "CHILD_OF",
-          "traceID": "41cb43618db5292312a1244651933f87",
-          "spanID": "e70542d8fc826c73"
+          "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+          "spanID": "4fca8ebe535e35a8"
         }
       ],
-      "startTime": 1791744274552594,
+      "startTime": 1791745723648079,
       "duration": 37,
       "tags": [
         {
@@ -291,18 +46,18 @@
       "warnings": null
     },
     {
-      "traceID": "41cb43618db5292312a1244651933f87",
-      "spanID": "1c5adbfd6efe73ff",
+      "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+      "spanID": "1cf4973fd7d834b3",
       "operationName": "fastapi.endpoint",
       "references": [
         {
           "refType": "CHILD_OF",
-          "traceID": "41cb43618db5292312a1244651933f87",
-          "spanID": "e70542d8fc826c73"
+          "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+          "spanID": "4fca8ebe535e35a8"
         }
       ],
-      "startTime": 1791744274552652,
-      "duration": 607,
+      "startTime": 1791745723648140,
+      "duration": 571,
       "tags": [
         {
           "key": "code.function.name",
@@ -335,18 +90,18 @@
       "warnings": null
     },
     {
-      "traceID": "41cb43618db5292312a1244651933f87",
-      "spanID": "9de3b2040719531e",
-      "operationName": "kafka.process qf-trace-38853860fc8b-join-a",
+      "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+      "spanID": "54adf2f592fc46a3",
+      "operationName": "kafka.process qf-trace-bbdaf9224114-join-a",
       "references": [
         {
           "refType": "CHILD_OF",
-          "traceID": "41cb43618db5292312a1244651933f87",
-          "spanID": "bbd778d7693fc3d3"
+          "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+          "spanID": "656039499181f0ae"
         }
       ],
-      "startTime": 1791744274560467,
-      "duration": 379,
+      "startTime": 1791745723655167,
+      "duration": 367,
       "tags": [
         {
           "key": "internal.span.format",
@@ -377,22 +132,124 @@
       "logs": [],
       "processID": "p2",
       "warnings": [
-        "clock skew adjustment disabled; not applying calculated delta of -1.013106ms"
+        "clock skew adjustment disabled; not applying calculated delta of -767.116\u00b5s"
       ]
     },
     {
-      "traceID": "41cb43618db5292312a1244651933f87",
-      "spanID": "bbd778d7693fc3d3",
-      "operationName": "kafka.process qf-trace-38853860fc8b-a",
+      "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+      "spanID": "62a0ce4097e59ba4",
+      "operationName": "application.merge",
       "references": [
         {
           "refType": "CHILD_OF",
-          "traceID": "41cb43618db5292312a1244651933f87",
-          "spanID": "884d936ca30d9c1d"
+          "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+          "spanID": "e101c5dd7e4c26c3"
         }
       ],
-      "startTime": 1791744274559312,
-      "duration": 664,
+      "startTime": 1791745723656404,
+      "duration": 10,
+      "tags": [
+        {
+          "key": "internal.span.format",
+          "type": "string",
+          "value": "otlp"
+        },
+        {
+          "key": "otel.scope.name",
+          "type": "string",
+          "value": "framework"
+        },
+        {
+          "key": "span.kind",
+          "type": "string",
+          "value": "internal"
+        }
+      ],
+      "logs": [],
+      "processID": "p2",
+      "warnings": null
+    },
+    {
+      "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+      "spanID": "acb0c0ae68365106",
+      "operationName": "application.b",
+      "references": [
+        {
+          "refType": "CHILD_OF",
+          "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+          "spanID": "9d637292d97a2079"
+        }
+      ],
+      "startTime": 1791745723654336,
+      "duration": 7,
+      "tags": [
+        {
+          "key": "internal.span.format",
+          "type": "string",
+          "value": "otlp"
+        },
+        {
+          "key": "otel.scope.name",
+          "type": "string",
+          "value": "framework"
+        },
+        {
+          "key": "span.kind",
+          "type": "string",
+          "value": "internal"
+        }
+      ],
+      "logs": [],
+      "processID": "p3",
+      "warnings": null
+    },
+    {
+      "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+      "spanID": "c0bdf53ee0a71d28",
+      "operationName": "application.a",
+      "references": [
+        {
+          "refType": "CHILD_OF",
+          "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+          "spanID": "656039499181f0ae"
+        }
+      ],
+      "startTime": 1791745723654318,
+      "duration": 8,
+      "tags": [
+        {
+          "key": "internal.span.format",
+          "type": "string",
+          "value": "otlp"
+        },
+        {
+          "key": "otel.scope.name",
+          "type": "string",
+          "value": "framework"
+        },
+        {
+          "key": "span.kind",
+          "type": "string",
+          "value": "internal"
+        }
+      ],
+      "logs": [],
+      "processID": "p4",
+      "warnings": null
+    },
+    {
+      "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+      "spanID": "656039499181f0ae",
+      "operationName": "kafka.process qf-trace-bbdaf9224114-a",
+      "references": [
+        {
+          "refType": "CHILD_OF",
+          "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+          "spanID": "eb01983dc18bbc01"
+        }
+      ],
+      "startTime": 1791745723654243,
+      "duration": 680,
       "tags": [
         {
           "key": "internal.span.format",
@@ -423,23 +280,66 @@
       "logs": [],
       "processID": "p4",
       "warnings": [
-        "clock skew adjustment disabled; not applying calculated delta of -3.368236ms"
+        "clock skew adjustment disabled; not applying calculated delta of -3.029741ms"
       ]
     },
     {
-      "traceID": "41cb43618db5292312a1244651933f87",
-      "spanID": "323a3442a6243da0",
-      "operationName": "application.a",
+      "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+      "spanID": "4fc6bd776b8de4a8",
+      "operationName": "fastapi.serialization",
       "references": [
         {
           "refType": "CHILD_OF",
-          "traceID": "41cb43618db5292312a1244651933f87",
-          "spanID": "bbd778d7693fc3d3"
+          "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+          "spanID": "4fca8ebe535e35a8"
         }
       ],
-      "startTime": 1791744274559380,
-      "duration": 6,
+      "startTime": 1791745723648739,
+      "duration": 14,
       "tags": [
+        {
+          "key": "code.function.name",
+          "type": "string",
+          "value": "__main__.publish"
+        },
+        {
+          "key": "internal.span.format",
+          "type": "string",
+          "value": "otlp"
+        },
+        {
+          "key": "otel.scope.name",
+          "type": "string",
+          "value": "fastapi"
+        },
+        {
+          "key": "otel.scope.version",
+          "type": "string",
+          "value": "0.143.0"
+        },
+        {
+          "key": "span.kind",
+          "type": "string",
+          "value": "internal"
+        }
+      ],
+      "logs": [],
+      "processID": "p1",
+      "warnings": null
+    },
+    {
+      "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+      "spanID": "4fca8ebe535e35a8",
+      "operationName": "POST /publish",
+      "references": [],
+      "startTime": 1791745723647868,
+      "duration": 989,
+      "tags": [
+        {
+          "key": "http.response.status_code",
+          "type": "int64",
+          "value": 200
+        },
         {
           "key": "internal.span.format",
           "type": "string",
@@ -457,56 +357,22 @@
         }
       ],
       "logs": [],
-      "processID": "p4",
+      "processID": "p1",
       "warnings": null
     },
     {
-      "traceID": "41cb43618db5292312a1244651933f87",
-      "spanID": "8c1b7671e4d5d10b",
-      "operationName": "application.b",
-      "references": [
-        {
-          "refType": "CHILD_OF",
-          "traceID": "41cb43618db5292312a1244651933f87",
-          "spanID": "ae13db255302b1ed"
-        }
-      ],
-      "startTime": 1791744274559327,
-      "duration": 8,
-      "tags": [
-        {
-          "key": "internal.span.format",
-          "type": "string",
-          "value": "otlp"
-        },
-        {
-          "key": "otel.scope.name",
-          "type": "string",
-          "value": "framework"
-        },
-        {
-          "key": "span.kind",
-          "type": "string",
-          "value": "internal"
-        }
-      ],
-      "logs": [],
-      "processID": "p3",
-      "warnings": null
-    },
-    {
-      "traceID": "41cb43618db5292312a1244651933f87",
-      "spanID": "aec9c4f6d33d2001",
+      "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+      "spanID": "b97b7cccc8233e3d",
       "operationName": "application.ingress",
       "references": [
         {
           "refType": "CHILD_OF",
-          "traceID": "41cb43618db5292312a1244651933f87",
-          "spanID": "884d936ca30d9c1d"
+          "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+          "spanID": "eb01983dc18bbc01"
         }
       ],
-      "startTime": 1791744274553845,
-      "duration": 4,
+      "startTime": 1791745723649177,
+      "duration": 3,
       "tags": [
         {
           "key": "internal.span.format",
@@ -527,6 +393,140 @@
       "logs": [],
       "processID": "p1",
       "warnings": null
+    },
+    {
+      "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+      "spanID": "eb01983dc18bbc01",
+      "operationName": "kafka.process qf-trace-bbdaf9224114-in",
+      "references": [
+        {
+          "refType": "CHILD_OF",
+          "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+          "spanID": "1cf4973fd7d834b3"
+        }
+      ],
+      "startTime": 1791745723649140,
+      "duration": 4827,
+      "tags": [
+        {
+          "key": "internal.span.format",
+          "type": "string",
+          "value": "otlp"
+        },
+        {
+          "key": "messaging.batch.message_count",
+          "type": "int64",
+          "value": 1
+        },
+        {
+          "key": "otel.scope.name",
+          "type": "string",
+          "value": "framework"
+        },
+        {
+          "key": "span.kind",
+          "type": "string",
+          "value": "consumer"
+        },
+        {
+          "key": "worker.name",
+          "type": "string",
+          "value": "fanout"
+        }
+      ],
+      "logs": [],
+      "processID": "p1",
+      "warnings": null
+    },
+    {
+      "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+      "spanID": "e101c5dd7e4c26c3",
+      "operationName": "kafka.process qf-trace-bbdaf9224114-join-b",
+      "references": [
+        {
+          "refType": "CHILD_OF",
+          "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+          "spanID": "9d637292d97a2079"
+        }
+      ],
+      "startTime": 1791745723655343,
+      "duration": 2056,
+      "tags": [
+        {
+          "key": "internal.span.format",
+          "type": "string",
+          "value": "otlp"
+        },
+        {
+          "key": "messaging.batch.message_count",
+          "type": "int64",
+          "value": 1
+        },
+        {
+          "key": "otel.scope.name",
+          "type": "string",
+          "value": "framework"
+        },
+        {
+          "key": "span.kind",
+          "type": "string",
+          "value": "consumer"
+        },
+        {
+          "key": "worker.name",
+          "type": "string",
+          "value": "merge"
+        }
+      ],
+      "logs": [],
+      "processID": "p2",
+      "warnings": null
+    },
+    {
+      "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+      "spanID": "9d637292d97a2079",
+      "operationName": "kafka.process qf-trace-bbdaf9224114-b",
+      "references": [
+        {
+          "refType": "CHILD_OF",
+          "traceID": "1fc7f43855d4c501050f625c7675fdd5",
+          "spanID": "eb01983dc18bbc01"
+        }
+      ],
+      "startTime": 1791745723654273,
+      "duration": 619,
+      "tags": [
+        {
+          "key": "internal.span.format",
+          "type": "string",
+          "value": "otlp"
+        },
+        {
+          "key": "messaging.batch.message_count",
+          "type": "int64",
+          "value": 1
+        },
+        {
+          "key": "otel.scope.name",
+          "type": "string",
+          "value": "framework"
+        },
+        {
+          "key": "span.kind",
+          "type": "string",
+          "value": "consumer"
+        },
+        {
+          "key": "worker.name",
+          "type": "string",
+          "value": "b"
+        }
+      ],
+      "logs": [],
+      "processID": "p3",
+      "warnings": [
+        "clock skew adjustment disabled; not applying calculated delta of -3.02936ms"
+      ]
     }
   ],
   "processes": {
@@ -536,7 +536,7 @@
         {
           "key": "service.instance.id",
           "type": "string",
-          "value": "6f139624-afcd-4bc0-83c2-eaeb2106d616"
+          "value": "539a8e78-1efa-4c7c-bbe2-d23a3601b6ac"
         },
         {
           "key": "telemetry.sdk.language",
@@ -561,7 +561,7 @@
         {
           "key": "service.instance.id",
           "type": "string",
-          "value": "14a64691-7c6a-4d54-96aa-0c86c3e0393b"
+          "value": "f1ab053e-2958-479a-bd07-171c5ecbacb8"
         },
         {
           "key": "telemetry.sdk.language",
@@ -586,7 +586,7 @@
         {
           "key": "service.instance.id",
           "type": "string",
-          "value": "d9439ea8-a8ae-4d9a-8681-4226c17232a2"
+          "value": "40140ab9-ea03-4887-91fe-e51e480b1f17"
         },
         {
           "key": "telemetry.sdk.language",
@@ -611,7 +611,7 @@
         {
           "key": "service.instance.id",
           "type": "string",
-          "value": "4ce86574-1803-4f84-941c-cdb5f979b44e"
+          "value": "1849b33d-c827-445f-be8b-1c0268e0f6d4"
         },
         {
           "key": "telemetry.sdk.language",

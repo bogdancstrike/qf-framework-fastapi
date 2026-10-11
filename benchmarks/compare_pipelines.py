@@ -77,6 +77,8 @@ async def trial(args, engine, workload, repeat):
         ]
         if old:
             command.append("--gevent")
+        elif args.idempotency:
+            command.append("--idempotency")
         process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT)
         proc = psutil.Process(process.pid)
 
@@ -322,6 +324,9 @@ if __name__ == "__main__":
     p.add_argument("--repeats", type=int, default=3)
     p.add_argument("--partitions", type=int, default=4)
     p.add_argument("--concurrency", type=int, default=8)
+    p.add_argument(
+        "--idempotency", action="store_true", help="Enable the new runtime's Redis source ledger"
+    )
     p.add_argument("--timeout", type=float, default=60)
     p.add_argument(
         "--stall-timeout",
@@ -336,4 +341,9 @@ if __name__ == "__main__":
         help="Emit progress JSON periodically; zero disables it",
     )
     p.add_argument("--output", default=str(ROOT / "benchmarks/results/pipelines.json"))
-    asyncio.run(main(p.parse_args()))
+    args = p.parse_args()
+    if args.idempotency and any(e.startswith("original") for e in args.engines.split(",")):
+        p.error(
+            "--idempotency requires only async/sync engines; the original has no equivalent ledger"
+        )
+    asyncio.run(main(args))
