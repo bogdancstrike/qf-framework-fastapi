@@ -21,3 +21,10 @@ Keep the original framework unchanged. Exercise independent OS processes with sh
 - [x] Reproduce the terminal-runtime liveness gap in `tests/test_api.py`, then return 503 only for a terminal ETL error from `/health/live`. Keep startup, temporary readiness loss and normal HTTP-only service live. Document native Kubernetes readiness versus restart behavior.
 - [x] Publish raw per-scenario evidence with partition ownership, expected/observed IDs, duplicate counts, restart timing and committed offsets in `benchmarks/results/horizontal_recovery.json`.
 - [x] Document group identity, worker contracts, partition limits, Redis persistence/TTL, external idempotency and deployment probes in `docs/Scaling.md`, the examples guide and both comparison reports. Run the full live suite, build, commit and push.
+
+## Python 3.15 compatibility
+
+- [ ] Verify stable release and obtain an isolated 3.15 interpreter without replacing system Python or the existing benchmark environment.
+- [ ] Install the complete dev/tracing dependency set and record versions; reproduce and fix any framework compatibility failures without hiding unsupported dependencies.
+- [ ] Run unit tests, full Kafka/Redis/chaos/replica/Jaeger tests and wheel/sdist build on 3.15. Preserve previous benchmark provenance; do not infer a 3.15 speedup without measurements.
+- [ ] Add supported interpreter versions to CI, document exact executed results in both reports, commit and push, and check CI.

@@ -5,7 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python: ['3.11', '3.12', '3.13']
+        python: ['3.11', '3.12', '3.13', '3.14', '3.15']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -17,11 +17,14 @@ jobs:
       - run: python -m build
   integration:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.12', '3.15']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '${{ matrix.python }}'
       - run: python -m pip install -e '.[dev,tracing]'
       - run: docker compose -p qf-fastapi-test up -d --wait
       - run: QF_INTEGRATION=1 QF_CHAOS=1 QF_JAEGER=1 QF_STRESS_MESSAGES=10000 python -m pytest -m integration -v
