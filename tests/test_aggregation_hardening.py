@@ -170,5 +170,3 @@ async def test_finish_is_retryable_after_reply_loss_but_fences_other_tokens(sett
             await store.finish(replace(claim, token="wrong-owner", finished=False), 60)
     finally:
         await redis.aclose()
-
-

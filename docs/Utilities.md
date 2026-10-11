@@ -12,6 +12,7 @@ from framework.decorators.single_execute import SingleExecute
 
 redis = Redis.from_url("redis://localhost:26379/0", socket_timeout=2)
 
+
 @SingleExecute(
     lock_id="refresh-catalog",
     redis_client=redis,
