@@ -68,7 +68,7 @@ The migration is justified for reviewable recovery boundaries, native async inte
 | HTTP | Real loopback TCP, one process, dynamic route plus schema, identity/5 ms sleep, 128 warmup requests, 1,000 measured requests/trial, concurrency 1/16/64/256, three repetitions |
 | Excluded | TLS overhead, real database/downstream API, multi-broker failover, broker power loss, Redis failover/data loss, large messages, multi-hour soak and CPU-heavy handlers |
 
-The worker load is a finite input burst with concurrent output collection. Latency runs from each payload timestamp immediately before producer enqueue to observation by the benchmark consumer, including input publishing, broker batching, framework queues, handler work and output delivery. It is not isolated handler service time. Commit throughput separately waits until the source group's committed offsets reach all published inputs. HTTP latency includes HTTPX connection pooling and scheduling.
+The worker load is a finite input burst with concurrent output collection. Latency runs from each payload timestamp immediately before producer enqueue to observation by the benchmark consumer, including input publishing, broker batching, framework queues, handler work and output delivery. It is not isolated handler service time. Commit throughput separately waits until the source group's committed offsets reach all published inputs. For original retries, those targets are the external input publisher's offsets; internal retry-topic republishes add source records and are not a separate final-offset target. All expected output IDs must still be observed before commit timing can finish. Retry payload bookkeeping also differs as documented in migration notes. HTTP latency includes HTTPX connection pooling and scheduling.
 
 CPU is user+system time of the worker/server process during measurement. RSS is sampled process memory approximately every 10 ms; it is not a true allocator peak or total host/container memory. Generator, broker, Redis, Jaeger and kernel costs are excluded. CPU timings have coarse granularity in short trials. Every table cell is a median across successful trials; independent metric medians need not describe one actual trial. Ranges show observed output throughput variability, not statistical confidence intervals.
 
@@ -119,7 +119,7 @@ The new sync path is close to native async for trivial work and bulk on this hos
 <!-- SCALE_COMPARISON_START -->
 ## Processing 1,000 versus 100,000 messages
 
-In progress: 18 of 24 planned trials recorded. All 100,000-message numbers are preliminary until three repetitions per engine/workload finish.
+In progress: 21 of 24 planned trials recorded. All 100,000-message numbers are preliminary until three repetitions per engine/workload finish.
 
 Same four partitions, eight worker jobs and three repetitions per engine/workload. The comparator is the **original ACK-gated harness variant**; it changes single-output waiting without repairing the original's other reliability defects. Output time measures the complete input burst to final observed output. Throughput is messages/second; higher is better. Time is seconds; lower is better.
 
@@ -132,7 +132,7 @@ Same four partitions, eight worker jobs and three repetitions per engine/workloa
 | 32-record bulk | 1,000 | 0.58 | 0.06 | 1,712.00 | 15,990.23 | 9.34× | 3/3 | 3/3 |
 | 32-record bulk | 100,000 | 49.70 | 5.99 | 2,012.00 | 16,707.12 | 8.30× | 3/3 | 3/3 |
 | 10% transient retry | 1,000 | 3.13 | 0.72 | 319.20 | 1,388.38 | 4.35× | 3/3 | 3/3 |
-| 10% transient retry | 100,000 | — | — | — | — | — | 0/0 | 0/0 |
+| 10% transient retry | 100,000 | 290.18 | 71.57 | 344.61 | 1,397.14 | 4.05× | 1/1 | 2/2 |
 
 Each cell is a median across successful trials. `0/0` means not yet attempted; failed attempts remain in the success counts and raw data. A ratio of 2.00× means twice the throughput, approximately half the elapsed time for the same count; a ratio below 1.00× favors Flask.
 
@@ -149,7 +149,7 @@ This separately waits until the broker reports source offsets committed through 
 | 32-record bulk | 1,000 | 0.61 | 0.07 | 1,651.10 | 14,313.64 |
 | 32-record bulk | 100,000 | 49.72 | 5.99 | 2,011.07 | 16,705.26 |
 | 10% transient retry | 1,000 | 3.13 | 0.73 | 319.15 | 1,374.37 |
-| 10% transient retry | 100,000 | — | — | — | — |
+| 10% transient retry | 100,000 | 290.18 | 71.60 | 344.61 | 1,396.72 |
 
 ### Does the small-test advantage hold at 100,000 messages?
 
@@ -158,7 +158,7 @@ This separately waits until the broker reports source offsets committed through 
 | Identity | 4.64× | 1.99× | Async remains faster; advantage is smaller at scale |
 | 5 ms I/O / message | 4.47× | 5.02× | Small-test advantage retained or increased |
 | 32-record bulk | 9.34× | 8.30× | Async remains faster; advantage is smaller at scale |
-| 10% transient retry | 4.35× | — | Pending paired successful trials |
+| 10% transient retry | 4.35× | 4.05× | Preliminary; repetitions still running |
 
 Identity's relative gain falls because original throughput rises from 301 to 693 msg/s, while async stays near 1,397 to 1,382 msg/s. A smaller ratio therefore does not mean async throughput collapsed; the original benefits more from the larger burst.
 
@@ -173,12 +173,12 @@ Identity's relative gain falls because original throughput rises from 301 to 693
 | 5 ms I/O / message | async | 3/3 | 36,030.95 | 68,318.88 | 71,232.12 | 15.85 | 124.53 |
 | 32-record bulk | original_ack | 3/3 | 9,457.35 | 42,217.84 | 45,347.18 | 14.77 | 66.21 |
 | 32-record bulk | async | 3/3 | 1,342.49 | 2,532.41 | 2,869.48 | 3.10 | 87.27 |
-| 10% transient retry | original_ack | 0/0 | — | — | — | — | — |
-| 10% transient retry | async | 0/0 | — | — | — | — | — |
+| 10% transient retry | original_ack | 1/1 | 149,005.36 | 271,434.82 | 285,837.63 | 125.95 | 65.83 |
+| 10% transient retry | async | 2/2 | 34,316.74 | 65,193.38 | 67,967.75 | 25.26 | 121.59 |
 
 ### Completion and resilience observations
 
-18 completed 100,000-message trials and 0 incomplete attempts are currently recorded. Completed trials contain 0 missing outputs, 0 immediate duplicates and 0 DLQ records. This is happy-path stress evidence; it does not replace the separate crash/outage tests.
+21 completed 100,000-message trials and 0 incomplete attempts are currently recorded. Completed trials contain 0 missing outputs, 0 immediate duplicates and 0 DLQ records. This is happy-path stress evidence; it does not replace the separate crash/outage tests.
 
 The large-run driver uses incremental unique-ID tracking to avoid repeated large set reconstruction. The payload, workers and measurement boundaries are unchanged; it also emits progress and records explicit output/source-commit stall diagnostics. Per-phase overall deadline is 900 seconds; no-progress deadline is 60 seconds. Execution order alternates across repetitions. Warmup is 128 records, excluded from measurement. Single broker, loopback transport and finite bursts remain the main experimental limits.
 
