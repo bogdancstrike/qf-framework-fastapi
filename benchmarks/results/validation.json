@@ -109,7 +109,8 @@
         6
       ],
       "artifact": "horizontal_recovery.json",
-      "scope": "Independent local OS processes, one Kafka broker and Redis; not an actual Kubernetes cluster or multi-node failover"
+      "scope": "Independent local OS processes, one Kafka broker and Redis; not an actual Kubernetes cluster or multi-node failover",
+      "excess_replica_check": "Broker confirms six members in Stable group before asserting four active and two idle assignments"
     },
     "performance": {
       "source_ledger_trials": 12,
@@ -146,6 +147,11 @@
       "status": "passed",
       "note": "Runtime/utility checkpoint, before the additional excess-replica scenario and final docs/evidence commit"
     },
-    "warning": "Starlette TestClient httpx deprecation; no failures"
+    "warning": "Starlette TestClient httpx deprecation; no failures",
+    "focused_follow_up": {
+      "command": "QF_INTEGRATION=1 python -m pytest tests/test_horizontal_recovery.py::test_more_replicas_than_partitions_are_safely_idle -q",
+      "passed": 1,
+      "duration_sec": 0.78
+    }
   }
 }

@@ -288,6 +288,21 @@ async def test_more_replicas_than_partitions_are_safely_idle(cluster, tmp_path):
     groups.append(replicas)
     (tmp_path / "release").touch()
     processes = [replicas.start() for _ in range(6)]
+    # Empty assignments alone could mean a new consumer has not joined yet.
+    # Confirm six actual members in a stable broker group before asserting idle
+    # capacity; all DescribeGroups versions share these first six tuple fields.
+    admin = AIOKafkaAdminClient(bootstrap_servers=BOOTSTRAP)
+    try:
+        await admin.start()
+        async with asyncio.timeout(50):
+            while True:
+                descriptions = await admin.describe_consumer_groups([prefix])
+                group = descriptions[0].groups[0]
+                if group[0] == 0 and group[2] == "Stable" and len(group[5]) == 6:
+                    break
+                await asyncio.sleep(0.05)
+    finally:
+        await admin.close()
     assignments = await replicas.until(lambda: replicas.assignments(processes, allow_idle=True))
     assert sum(bool(snapshot["assignment"]) for snapshot in assignments) == 4
     expected = await publish(producer, topics[:1], 96)
@@ -299,6 +314,8 @@ async def test_more_replicas_than_partitions_are_safely_idle(cluster, tmp_path):
         "six-replicas-four-partitions",
         {
             "replicas": 6,
+            "broker_group_state": "Stable",
+            "broker_member_count": 6,
             "active_consumers": 4,
             "idle_consumers": 2,
             "input_records": 96,

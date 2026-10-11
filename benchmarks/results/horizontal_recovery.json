@@ -615,6 +615,8 @@
     "partitions_per_topic": 4,
     "deployment": "independent OS processes; local single broker and Redis",
     "replicas": 6,
+    "broker_group_state": "Stable",
+    "broker_member_count": 6,
     "active_consumers": 4,
     "idle_consumers": 2,
     "input_records": 96,
@@ -625,55 +627,55 @@
     "dlq": 0,
     "assignments": [
       {
-        "pid": 1173054,
+        "pid": 1214679,
         "assignment": [
           [
-            "qf-replicas-99d967239a29-a",
+            "qf-replicas-5642d3bd677c-a",
             1
           ]
         ]
       },
       {
-        "pid": 1173055,
+        "pid": 1214680,
         "assignment": [
           [
-            "qf-replicas-99d967239a29-a",
+            "qf-replicas-5642d3bd677c-a",
             2
           ]
         ]
       },
       {
-        "pid": 1173056,
+        "pid": 1214681,
         "assignment": []
       },
       {
-        "pid": 1173057,
-        "assignment": []
-      },
-      {
-        "pid": 1173058,
+        "pid": 1214682,
         "assignment": [
           [
-            "qf-replicas-99d967239a29-a",
+            "qf-replicas-5642d3bd677c-a",
             3
           ]
         ]
       },
       {
-        "pid": 1173059,
+        "pid": 1214683,
         "assignment": [
           [
-            "qf-replicas-99d967239a29-a",
+            "qf-replicas-5642d3bd677c-a",
             0
           ]
         ]
+      },
+      {
+        "pid": 1214684,
+        "assignment": []
       }
     ],
     "committed_offsets": {
-      "qf-replicas-99d967239a29-a:0": 24,
-      "qf-replicas-99d967239a29-a:1": 24,
-      "qf-replicas-99d967239a29-a:2": 24,
-      "qf-replicas-99d967239a29-a:3": 24
+      "qf-replicas-5642d3bd677c-a:0": 24,
+      "qf-replicas-5642d3bd677c-a:1": 24,
+      "qf-replicas-5642d3bd677c-a:2": 24,
+      "qf-replicas-5642d3bd677c-a:3": 24
     }
   }
 }
