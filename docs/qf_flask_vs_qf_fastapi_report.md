@@ -108,6 +108,71 @@ Native async identity throughput is about 7.89× lower than stock original ident
 
 The new sync path is close to native async for trivial work and bulk on this host, while native async handles the per-record simulated wait more efficiently. Async syntax alone does not accelerate CPU-bound Python. Thread-offloaded workers remain subject to the GIL, thread scheduling and cancellation limitations.
 
+<!-- SCALE_COMPARISON_START -->
+## Processing 1,000 versus 100,000 messages
+
+In progress: 6 of 24 planned trials recorded. All 100,000-message numbers are preliminary until three repetitions per engine/workload finish.
+
+Same four partitions, eight worker jobs and three repetitions per engine/workload. The comparator is the **original ACK-gated harness variant**; it changes single-output waiting without repairing the original's other reliability defects. Output time measures the complete input burst to final observed output. Throughput is messages/second; higher is better. Time is seconds; lower is better.
+
+| Workload | Messages | Flask ACK output s | Async output s | Flask ACK msg/s | Async msg/s | Async / Flask rate | Flask passed/attempted | Async passed/attempted |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Identity | 1,000 | 3.32 | 0.72 | 301.30 | 1,397.27 | 4.64× | 3/3 | 3/3 |
+| Identity | 100,000 | 144.23 | 72.34 | 693.33 | 1,382.42 | 1.99× | 3/3 | 3/3 |
+| 5 ms I/O / message | 1,000 | 3.36 | 0.75 | 297.69 | 1,331.21 | 4.47× | 3/3 | 3/3 |
+| 5 ms I/O / message | 100,000 | — | — | — | — | — | 0/0 | 0/0 |
+| 32-record bulk | 1,000 | 0.58 | 0.06 | 1,712.00 | 15,990.23 | 9.34× | 3/3 | 3/3 |
+| 32-record bulk | 100,000 | — | — | — | — | — | 0/0 | 0/0 |
+| 10% transient retry | 1,000 | 3.13 | 0.72 | 319.20 | 1,388.38 | 4.35× | 3/3 | 3/3 |
+| 10% transient retry | 100,000 | — | — | — | — | — | 0/0 | 0/0 |
+
+Each cell is a median across successful trials. `0/0` means not yet attempted; failed attempts remain in the success counts and raw data. A ratio of 2.00× means twice the throughput, approximately half the elapsed time for the same count; a ratio below 1.00× favors Flask.
+
+### Source-commit completion time
+
+This separately waits until the broker reports source offsets committed through the published inputs. It is not atomic output-plus-input delivery or an exactly-once guarantee.
+
+| Workload | Messages | Flask ACK commit s | Async commit s | Flask ACK commit msg/s | Async commit msg/s |
+| --- | --- | --- | --- | --- | --- |
+| Identity | 1,000 | 3.34 | 0.73 | 299.36 | 1,374.06 |
+| Identity | 100,000 | 144.25 | 72.37 | 693.23 | 1,381.81 |
+| 5 ms I/O / message | 1,000 | 3.40 | 0.77 | 293.99 | 1,294.92 |
+| 5 ms I/O / message | 100,000 | — | — | — | — |
+| 32-record bulk | 1,000 | 0.61 | 0.07 | 1,651.10 | 14,313.64 |
+| 32-record bulk | 100,000 | — | — | — | — |
+| 10% transient retry | 1,000 | 3.13 | 0.73 | 319.15 | 1,374.37 |
+| 10% transient retry | 100,000 | — | — | — | — |
+
+### Does the small-test advantage hold at 100,000 messages?
+
+| Workload | 1,000-message ratio | 100,000-message ratio | Interpretation |
+| --- | --- | --- | --- |
+| Identity | 4.64× | 1.99× | Async remains faster; advantage is smaller at scale |
+| 5 ms I/O / message | 4.47× | — | Pending paired successful trials |
+| 32-record bulk | 9.34× | — | Pending paired successful trials |
+| 10% transient retry | 4.35× | — | Pending paired successful trials |
+
+### 100,000-message latency and process resources
+
+| Workload | Engine | Passed/attempted | p50 ms | p95 ms | p99 ms | CPU s | RSS MiB |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Identity | original_ack | 3/3 | 68,160.79 | 129,493.29 | 137,688.09 | 89.95 | 63.74 |
+| Identity | async | 3/3 | 34,673.04 | 65,902.93 | 68,650.39 | 15.65 | 123.23 |
+| 5 ms I/O / message | original_ack | 0/0 | — | — | — | — | — |
+| 5 ms I/O / message | async | 0/0 | — | — | — | — | — |
+| 32-record bulk | original_ack | 0/0 | — | — | — | — | — |
+| 32-record bulk | async | 0/0 | — | — | — | — | — |
+| 10% transient retry | original_ack | 0/0 | — | — | — | — | — |
+| 10% transient retry | async | 0/0 | — | — | — | — | — |
+
+### Completion and resilience observations
+
+6 completed 100,000-message trials and 0 incomplete attempts are currently recorded. Completed trials contain 0 missing outputs, 0 immediate duplicates and 0 DLQ records. This is happy-path stress evidence; it does not replace the separate crash/outage tests.
+
+The large-run driver uses incremental unique-ID tracking to avoid repeated large set reconstruction. The payload, workers and measurement boundaries are unchanged; it also emits progress and records explicit output/source-commit stall diagnostics. Per-phase overall deadline is 900 seconds; no-progress deadline is 60 seconds. Execution order alternates across repetitions. Warmup is 128 records, excluded from measurement. Single broker, loopback transport and finite bursts remain the main experimental limits.
+
+<!-- SCALE_COMPARISON_END -->
+
 ## Larger bursts, tuning and failures
 
 Initial 5,000-record / 32-job measurements used aiokafka's 500 ms fetch wait. They revealed a large bulk slowdown when bounded admission repeatedly paused/seeks/refetched data. Profiling showed waiting, not JSON processing, dominated a diagnostic run: 2.395 seconds in epoll poll versus 0.317 seconds executing event-loop callbacks. Profiling itself added overhead, so that run is not included in throughput comparisons. Source review identified outstanding broker fetch waits as a plausible contributor; the measured controlled setting change supports that explanation without proving it is the only bottleneck.

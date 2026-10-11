@@ -390,6 +390,54 @@ Three repetitions per cell; all 48 final worker trials completed with no missing
 
 One original trial reached the 60-second deadline and is excluded from successful-trial medians; its cause was not isolated by the harness. The original ACK variant only changes output waiting, not its other reliability defects.
 
+### Processing time · same 1,000-message workload
+
+Total elapsed seconds for the finite input burst, shown separately for the final output and for source commits observed by the driver. Lower is better. These are not individual-message service times.
+
+| Workload | Flask ACK output time | Async output time | Flask ACK source-commit time | Async source-commit time | Async throughput advantage |
+|---|---:|---:|---:|---:|---:|
+| noop | 3.319 s | 0.716 s | 3.341 s | 0.728 s | 4.64× |
+| io | 3.359 s | 0.751 s | 3.401 s | 0.772 s | 4.47× |
+| bulk | 0.584 s | 0.063 s | 0.606 s | 0.070 s | 9.34× |
+| retry | 3.133 s | 0.720 s | 3.133 s | 0.728 s | 4.35× |
+
+
+<!-- SCALE_COMPARISON_START -->
+## Processing 1,000 versus 100,000 messages
+
+In progress: 6 of 24 planned trials recorded. All 100,000-message numbers are preliminary until three repetitions per engine/workload finish.
+
+Same four partitions, eight worker jobs and three repetitions per engine/workload. The comparator is the **original ACK-gated harness variant**; it changes single-output waiting without repairing the original's other reliability defects. Output time measures the complete input burst to final observed output. Throughput is messages/second; higher is better. Time is seconds; lower is better.
+
+| Workload | Messages | Flask ACK output s | Async output s | Flask ACK msg/s | Async msg/s | Async / Flask rate | Flask passed/attempted | Async passed/attempted |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Identity | 1,000 | 3.32 | 0.72 | 301.30 | 1,397.27 | 4.64× | 3/3 | 3/3 |
+| Identity | 100,000 | 144.23 | 72.34 | 693.33 | 1,382.42 | 1.99× | 3/3 | 3/3 |
+| 5 ms I/O / message | 1,000 | 3.36 | 0.75 | 297.69 | 1,331.21 | 4.47× | 3/3 | 3/3 |
+| 5 ms I/O / message | 100,000 | — | — | — | — | — | 0/0 | 0/0 |
+| 32-record bulk | 1,000 | 0.58 | 0.06 | 1,712.00 | 15,990.23 | 9.34× | 3/3 | 3/3 |
+| 32-record bulk | 100,000 | — | — | — | — | — | 0/0 | 0/0 |
+| 10% transient retry | 1,000 | 3.13 | 0.72 | 319.20 | 1,388.38 | 4.35× | 3/3 | 3/3 |
+| 10% transient retry | 100,000 | — | — | — | — | — | 0/0 | 0/0 |
+
+Each cell is a median across successful trials. `0/0` means not yet attempted; failed attempts remain in the success counts and raw data. A ratio of 2.00× means twice the throughput, approximately half the elapsed time for the same count; a ratio below 1.00× favors Flask.
+
+### Source-commit completion time
+
+This separately waits until the broker reports source offsets committed through the published inputs. It is not atomic output-plus-input delivery or an exactly-once guarantee.
+
+| Workload | Messages | Flask ACK commit s | Async commit s | Flask ACK commit msg/s | Async commit msg/s |
+| --- | --- | --- | --- | --- | --- |
+| Identity | 1,000 | 3.34 | 0.73 | 299.36 | 1,374.06 |
+| Identity | 100,000 | 144.25 | 72.37 | 693.23 | 1,381.81 |
+| 5 ms I/O / message | 1,000 | 3.40 | 0.77 | 293.99 | 1,294.92 |
+| 5 ms I/O / message | 100,000 | — | — | — | — |
+| 32-record bulk | 1,000 | 0.61 | 0.07 | 1,651.10 | 14,313.64 |
+| 32-record bulk | 100,000 | — | — | — | — |
+| 10% transient retry | 1,000 | 3.13 | 0.73 | 319.15 | 1,374.37 |
+| 10% transient retry | 100,000 | — | — | — | — |
+<!-- SCALE_COMPARISON_END -->
+
 ### HTTP · 1,000 requests per trial
 
 | Workload | Clients | Flask req/s | FastAPI req/s | Flask p95 ms | FastAPI p95 ms |
