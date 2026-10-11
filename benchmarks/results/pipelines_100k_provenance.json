@@ -1,0 +1,26 @@
+{
+  "measurement_date": "2026-10-11",
+  "original_revision": "d54b3acae4b902e8715455bc9464ae11565ba739",
+  "fastapi_runtime_and_driver_revision": "943ef18f670150576063f93615c079cc0b5a6d19",
+  "command": "python benchmarks/compare_pipelines.py --messages 100000 --repeats 3 --concurrency 8 --engines original_ack,async --workloads noop,io,bulk,retry --timeout 900 --stall-timeout 60 --progress-interval 30 --output benchmarks/results/pipelines_100k.json",
+  "matched_controls": {
+    "partitions": 4,
+    "worker_jobs": 8,
+    "warmup_messages": 128,
+    "messages_per_trial": 100000,
+    "repetitions": 3,
+    "bulk_batch_size": 32,
+    "bulk_timeout_ms": 10,
+    "commit_tick_sec": 0.02,
+    "poll_timeout_ms": 25,
+    "pending_setting": 128
+  },
+  "deliberate_differences": [
+    "Original ACK variant changes only single-output ACK waiting; existing original reliability defects remain",
+    "New runtime bounds all uncommitted fetched records; original bounds pending records only",
+    "New fetch_max_wait_ms=50; original client retains its source/library default",
+    "Original retries republish; new handler retries run locally with fresh copies"
+  ],
+  "execution": "Sequential worker trials with alternating engine order; no local tests/chaos or concurrent benchmark suites during measurements",
+  "reporting": "All attempts retained; failed trials excluded from performance medians and explicitly counted; incremental unique-ID tracking and stage-specific stall diagnostics enabled"
+}

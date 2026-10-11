@@ -1,0 +1,27 @@
+Profiled diagnostic only; instrumentation adds overhead. Excluded from throughput comparisons.
+
+Sun Oct 11 20:17:21 2026    benchmarks/results/async-bulk.prof
+
+         1353939 function calls (1302307 primitive calls) in 2.732 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1153 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        3    0.000    0.000    5.467    1.822 base_events.py:651(run_until_complete)
+        3    0.001    0.000    5.464    1.821 base_events.py:627(run_forever)
+     2622    0.009    0.000    5.464    0.002 base_events.py:1910(_run_once)
+        1    0.000    0.000    2.734    2.734 runners.py:160(run)
+        1    0.000    0.000    2.734    2.734 runners.py:61(__exit__)
+        1    0.000    0.000    2.734    2.734 runners.py:64(close)
+        1    0.000    0.000    2.733    2.733 runners.py:86(run)
+     2622    0.002    0.000    2.400    0.001 selectors.py:451(select)
+     2622    2.395    0.001    2.395    0.001 {method 'poll' of 'select.epoll' objects}
+     9219    0.003    0.000    0.317    0.000 events.py:86(_run)
+     9219    0.004    0.000    0.315    0.000 {method 'run' of '_contextvars.Context' objects}
+      494    0.001    0.000    0.184    0.000 framework_etl.py:206(job)
+      494    0.001    0.000    0.182    0.000 processing.py:203(handle)
+      494    0.004    0.000    0.182    0.000 processing.py:213(_handle)
+      494    0.001    0.000    0.149    0.000 processing.py:252(execute)
+
+

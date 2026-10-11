@@ -51,6 +51,7 @@ The migration is justified for reviewable recovery boundaries, native async inte
 | Infrastructure | Docker Apache Kafka 3.9.1 single broker/controller; Redis 7.4 Alpine; Jaeger all-in-one 1.62.0 |
 | Durability | Kafka replication factor 1; producer `acks=all`; Redis AOF everysec; no replicated storage proof |
 | Worker trials | Separate worker processes and Python environments, four partitions, 128-record warmup, three repetitions, alternating engine order |
+| Worker topology | One measured stage: Kafka input → worker → Kafka output; multi-stage fanout/join is separately tested for correctness/tracing, not benchmarked at 100,000 messages |
 | Main workload | 1,000 records/trial, eight active jobs, bulk size 32 / age 10 ms, 20 ms commit tick |
 | Larger workload | 5,000 records/trial, 32 active jobs, same four partitions and payload shape |
 | Bounds | Harness pending setting 128 per partition; new runtime bounds all uncommitted records, original does not implement an equivalent bound |
@@ -111,7 +112,7 @@ The new sync path is close to native async for trivial work and bulk on this hos
 <!-- SCALE_COMPARISON_START -->
 ## Processing 1,000 versus 100,000 messages
 
-In progress: 6 of 24 planned trials recorded. All 100,000-message numbers are preliminary until three repetitions per engine/workload finish.
+In progress: 8 of 24 planned trials recorded. All 100,000-message numbers are preliminary until three repetitions per engine/workload finish.
 
 Same four partitions, eight worker jobs and three repetitions per engine/workload. The comparator is the **original ACK-gated harness variant**; it changes single-output waiting without repairing the original's other reliability defects. Output time measures the complete input burst to final observed output. Throughput is messages/second; higher is better. Time is seconds; lower is better.
 
@@ -120,7 +121,7 @@ Same four partitions, eight worker jobs and three repetitions per engine/workloa
 | Identity | 1,000 | 3.32 | 0.72 | 301.30 | 1,397.27 | 4.64× | 3/3 | 3/3 |
 | Identity | 100,000 | 144.23 | 72.34 | 693.33 | 1,382.42 | 1.99× | 3/3 | 3/3 |
 | 5 ms I/O / message | 1,000 | 3.36 | 0.75 | 297.69 | 1,331.21 | 4.47× | 3/3 | 3/3 |
-| 5 ms I/O / message | 100,000 | — | — | — | — | — | 0/0 | 0/0 |
+| 5 ms I/O / message | 100,000 | 375.49 | 74.59 | 266.32 | 1,340.70 | 5.03× | 1/1 | 1/1 |
 | 32-record bulk | 1,000 | 0.58 | 0.06 | 1,712.00 | 15,990.23 | 9.34× | 3/3 | 3/3 |
 | 32-record bulk | 100,000 | — | — | — | — | — | 0/0 | 0/0 |
 | 10% transient retry | 1,000 | 3.13 | 0.72 | 319.20 | 1,388.38 | 4.35× | 3/3 | 3/3 |
@@ -137,7 +138,7 @@ This separately waits until the broker reports source offsets committed through 
 | Identity | 1,000 | 3.34 | 0.73 | 299.36 | 1,374.06 |
 | Identity | 100,000 | 144.25 | 72.37 | 693.23 | 1,381.81 |
 | 5 ms I/O / message | 1,000 | 3.40 | 0.77 | 293.99 | 1,294.92 |
-| 5 ms I/O / message | 100,000 | — | — | — | — |
+| 5 ms I/O / message | 100,000 | 375.51 | 74.61 | 266.30 | 1,340.31 |
 | 32-record bulk | 1,000 | 0.61 | 0.07 | 1,651.10 | 14,313.64 |
 | 32-record bulk | 100,000 | — | — | — | — |
 | 10% transient retry | 1,000 | 3.13 | 0.73 | 319.15 | 1,374.37 |
@@ -148,7 +149,7 @@ This separately waits until the broker reports source offsets committed through 
 | Workload | 1,000-message ratio | 100,000-message ratio | Interpretation |
 | --- | --- | --- | --- |
 | Identity | 4.64× | 1.99× | Async remains faster; advantage is smaller at scale |
-| 5 ms I/O / message | 4.47× | — | Pending paired successful trials |
+| 5 ms I/O / message | 4.47× | 5.03× | Preliminary; repetitions still running |
 | 32-record bulk | 9.34× | — | Pending paired successful trials |
 | 10% transient retry | 4.35× | — | Pending paired successful trials |
 
@@ -158,8 +159,8 @@ This separately waits until the broker reports source offsets committed through 
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Identity | original_ack | 3/3 | 68,160.79 | 129,493.29 | 137,688.09 | 89.95 | 63.74 |
 | Identity | async | 3/3 | 34,673.04 | 65,902.93 | 68,650.39 | 15.65 | 123.23 |
-| 5 ms I/O / message | original_ack | 0/0 | — | — | — | — | — |
-| 5 ms I/O / message | async | 0/0 | — | — | — | — | — |
+| 5 ms I/O / message | original_ack | 1/1 | 195,005.14 | 354,240.10 | 368,964.59 | 56.11 | 64.50 |
+| 5 ms I/O / message | async | 1/1 | 35,714.78 | 68,005.76 | 70,897.75 | 15.85 | 124.53 |
 | 32-record bulk | original_ack | 0/0 | — | — | — | — | — |
 | 32-record bulk | async | 0/0 | — | — | — | — | — |
 | 10% transient retry | original_ack | 0/0 | — | — | — | — | — |
@@ -167,7 +168,7 @@ This separately waits until the broker reports source offsets committed through 
 
 ### Completion and resilience observations
 
-6 completed 100,000-message trials and 0 incomplete attempts are currently recorded. Completed trials contain 0 missing outputs, 0 immediate duplicates and 0 DLQ records. This is happy-path stress evidence; it does not replace the separate crash/outage tests.
+8 completed 100,000-message trials and 0 incomplete attempts are currently recorded. Completed trials contain 0 missing outputs, 0 immediate duplicates and 0 DLQ records. This is happy-path stress evidence; it does not replace the separate crash/outage tests.
 
 The large-run driver uses incremental unique-ID tracking to avoid repeated large set reconstruction. The payload, workers and measurement boundaries are unchanged; it also emits progress and records explicit output/source-commit stall diagnostics. Per-phase overall deadline is 900 seconds; no-progress deadline is 60 seconds. Execution order alternates across repetitions. Warmup is 128 records, excluded from measurement. Single broker, loopback transport and finite bursts remain the main experimental limits.
 

@@ -161,6 +161,42 @@
       "repeat": 2,
       "cpu_sec": 15.75,
       "peak_rss_mib": 123.2265625
+    },
+    {
+      "messages": 100000,
+      "elapsed_sec": 375.4904337120006,
+      "messages_per_sec": 266.3183693161662,
+      "commit_elapsed_sec": 375.51295331000074,
+      "commit_messages_per_sec": 266.30239814243123,
+      "p50_ms": 195005.13838000008,
+      "p95_ms": 354240.1030160008,
+      "p99_ms": 368964.5864579998,
+      "duplicates": 0,
+      "missing": 0,
+      "dlq": 0,
+      "engine": "original_ack",
+      "workload": "io",
+      "repeat": 0,
+      "cpu_sec": 56.11,
+      "peak_rss_mib": 64.5
+    },
+    {
+      "messages": 100000,
+      "elapsed_sec": 74.58801288700033,
+      "messages_per_sec": 1340.6980040009703,
+      "commit_elapsed_sec": 74.6094780630001,
+      "commit_messages_per_sec": 1340.3122846612089,
+      "p50_ms": 35714.78133999972,
+      "p95_ms": 68005.7648309994,
+      "p99_ms": 70897.74665599997,
+      "duplicates": 0,
+      "missing": 0,
+      "dlq": 0,
+      "engine": "async",
+      "workload": "io",
+      "repeat": 0,
+      "cpu_sec": 15.850000000000001,
+      "peak_rss_mib": 124.52734375
     }
   ]
 }
