@@ -9,3 +9,7 @@ async def echo(app, request: Request, operation, item_id: int):
 
 def legacy_echo(app, request, operation):
     return {"operation": operation, "payload": request.get_json()}, 201
+
+
+async def ping(app, request, operation):
+    return {"status": "ok", "operation": operation}

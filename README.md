@@ -285,6 +285,22 @@ async def echo(app, request, operation, item_id: int):
     return {"id": item_id, "operation": operation, "payload": await request.json()}
 ```
 
+### Endpoints without a model
+
+Use JSON `null` (Python `None`) or omit `model_name` to skip schema validation:
+
+```json
+{
+  "namespace": "examples",
+  "operation_name": "ping",
+  "model_name": null,
+  "request_method": ["GET"],
+  "exec_method": {"module_name": "examples.handlers", "method_name": "ping"}
+}
+```
+
+No request body is required. For POST/PUT/PATCH/DELETE, valid arbitrary JSON is passed through without a Pydantic model; malformed JSON still returns 400. The top-level `models` may also be omitted or set to `null`, and an explicitly named model definition may be `null`. In JSON, spell the value `null`, not the string `"None"`. Try `curl http://localhost:4000/examples/ping` in the bundled example.
+
 Legacy sync handlers receive a compatibility adapter with `get_json()`, `json`, `args` and `headers`; `(body, status)` and `(body, status, headers)` responses work. Flask globals/extensions require migration. See the [runnable endpoint example](examples/maps/endpoint.json).
 
 ## How reliability works

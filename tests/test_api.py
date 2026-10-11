@@ -122,3 +122,61 @@ def test_error_response_keeps_request_id_and_hides_exception():
         assert response.headers["x-request-id"] == "test-id"
         assert response.json()["request_id"] == "test-id"
         assert "internal secret" not in response.text
+
+
+@pytest.mark.parametrize("native", [False, True])
+@pytest.mark.parametrize("method", ["GET", "POST", "PATCH"])
+@pytest.mark.parametrize(
+    "variant", ["null_name", "omitted_name", "null_models", "omitted_models", "null_definition"]
+)
+def test_endpoints_without_model_accept_optional_unvalidated_json(
+    tmp_path, monkeypatch, native, method, variant
+):
+    def sync_handler(app, operation, request):
+        return {"payload": request.get_json()}
+
+    async def async_handler(app, operation, request):
+        raw = await request.body()
+        return {"payload": json.loads(raw) if raw else None}
+
+    monkeypatch.setitem(
+        sys.modules,
+        "no_model_fixture",
+        SimpleNamespace(handler=async_handler if native else sync_handler),
+    )
+    entry = {
+        "namespace": "free",
+        "operation_name": "echo",
+        "model_name": None,
+        "request_method": [method],
+        "exec_method": {"module_name": "no_model_fixture", "method_name": "handler"},
+    }
+    mapping = {"namespaces": [{"name": "free"}], "models": {}, "endpoints": [entry]}
+    if variant == "omitted_name":
+        entry.pop("model_name")
+    elif variant == "null_models":
+        mapping["models"] = None
+    elif variant == "omitted_models":
+        mapping.pop("models")
+    elif variant == "null_definition":
+        mapping["models"] = {"Unvalidated": None}
+        entry["model_name"] = "Unvalidated"
+    (tmp_path / "endpoint.json").write_text(json.dumps(mapping))
+    app = FrameworkApp(
+        FrameworkSettings(enable_etl=False, endpoint_json_path="endpoint.json"), app_root=tmp_path
+    ).build_app()
+    with TestClient(app) as client:
+        assert client.request(method, "/free/echo").json() == {"payload": None}
+        schema = client.get("/openapi.json").json()["paths"]["/free/echo"][method.lower()]
+        assert "requestBody" not in schema
+        if method != "GET":
+            for payload in ({"arbitrary": 42}, [1, "two"], "hello", None):
+                response = client.request(
+                    method,
+                    "/free/echo",
+                    content=json.dumps(payload),
+                    headers={"Content-Type": "application/json"},
+                )
+                assert response.status_code == 200
+                assert response.json() == {"payload": payload}
+            assert client.request(method, "/free/echo", content="{").status_code == 400

@@ -75,3 +75,7 @@ Missing aggregate correlation keys are routed to DLQ. Topic merge precedence is 
 `SingleExecute` supports both sync Redis clients for sync functions and async Redis clients for async functions. Redis is the supported distributed lock backend; the unsafe expiring filesystem lease implementation is not carried forward. Use an external scheduler for periodic execution. Ownership loss cannot undo user side effects; use downstream fencing/idempotency for critical actions.
 
 Literal helper parsing uses `ast.literal_eval`, replacing expression execution. Full-width integer-to-byte conversion and nested empty-path lookup are corrected. APDU/hex helpers retain their principal names, but are legacy domain utilities, not an independently certified protocol implementation.
+
+## Model-free endpoints
+
+Set `"model_name": null` or omit `model_name` for a route with no schema and no required body. The top-level `models` may be omitted or `null`; a named definition such as `"models": {"Unvalidated": null}` also disables validation for endpoints referencing it. JSON uses `null`, corresponding to Python `None`. Arbitrary valid JSON objects, arrays, scalars and null bodies are accepted for model-free mutation routes; malformed JSON returns 400. Unknown non-null model names still fail construction. Regression tests cover GET/POST/PATCH, async/sync handlers, absent bodies, OpenAPI and all supported null/omitted forms.

@@ -42,7 +42,7 @@ class LegacyRequest:
 
 
 def get_model(api, models, model_name):
-    definition = models.get(model_name)
+    definition = (models or {}).get(model_name)
     if not definition:
         return None
     fields = {}
@@ -162,9 +162,10 @@ def generate_endpoints_from_config(api, path="maps/endpoint.json", wait=0):
     namespaces = {ns["name"]: ns for ns in config["namespaces"]}
     if len(namespaces) != len(config["namespaces"]):
         raise ValueError("Duplicate namespace")
-    models = {
-        name: get_model(api, config.get("models", {}), name) for name in config.get("models", {})
-    }
+    definitions = config.get("models") or {}
+    if not isinstance(definitions, dict):
+        raise ValueError("models must be an object or null")
+    models = {name: get_model(api, definitions, name) for name in definitions}
     seen = {(r.path, method) for r in api.routes for method in getattr(r, "methods", [])}
     compiled = []
     for entry in config["endpoints"]:
