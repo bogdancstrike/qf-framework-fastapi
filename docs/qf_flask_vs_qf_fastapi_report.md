@@ -119,7 +119,7 @@ The new sync path is close to native async for trivial work and bulk on this hos
 <!-- SCALE_COMPARISON_START -->
 ## Processing 1,000 versus 100,000 messages
 
-In progress: 15 of 24 planned trials recorded. All 100,000-message numbers are preliminary until three repetitions per engine/workload finish.
+In progress: 18 of 24 planned trials recorded. All 100,000-message numbers are preliminary until three repetitions per engine/workload finish.
 
 Same four partitions, eight worker jobs and three repetitions per engine/workload. The comparator is the **original ACK-gated harness variant**; it changes single-output waiting without repairing the original's other reliability defects. Output time measures the complete input burst to final observed output. Throughput is messages/second; higher is better. Time is seconds; lower is better.
 
@@ -130,7 +130,7 @@ Same four partitions, eight worker jobs and three repetitions per engine/workloa
 | 5 ms I/O / message | 1,000 | 3.36 | 0.75 | 297.69 | 1,331.21 | 4.47× | 3/3 | 3/3 |
 | 5 ms I/O / message | 100,000 | 376.17 | 74.92 | 265.84 | 1,334.74 | 5.02× | 3/3 | 3/3 |
 | 32-record bulk | 1,000 | 0.58 | 0.06 | 1,712.00 | 15,990.23 | 9.34× | 3/3 | 3/3 |
-| 32-record bulk | 100,000 | 47.92 | 6.18 | 2,086.77 | 16,196.72 | 7.76× | 1/1 | 2/2 |
+| 32-record bulk | 100,000 | 49.70 | 5.99 | 2,012.00 | 16,707.12 | 8.30× | 3/3 | 3/3 |
 | 10% transient retry | 1,000 | 3.13 | 0.72 | 319.20 | 1,388.38 | 4.35× | 3/3 | 3/3 |
 | 10% transient retry | 100,000 | — | — | — | — | — | 0/0 | 0/0 |
 
@@ -147,7 +147,7 @@ This separately waits until the broker reports source offsets committed through 
 | 5 ms I/O / message | 1,000 | 3.40 | 0.77 | 293.99 | 1,294.92 |
 | 5 ms I/O / message | 100,000 | 376.21 | 74.92 | 265.81 | 1,334.74 |
 | 32-record bulk | 1,000 | 0.61 | 0.07 | 1,651.10 | 14,313.64 |
-| 32-record bulk | 100,000 | 47.94 | 6.18 | 2,085.83 | 16,195.02 |
+| 32-record bulk | 100,000 | 49.72 | 5.99 | 2,011.07 | 16,705.26 |
 | 10% transient retry | 1,000 | 3.13 | 0.73 | 319.15 | 1,374.37 |
 | 10% transient retry | 100,000 | — | — | — | — |
 
@@ -157,7 +157,7 @@ This separately waits until the broker reports source offsets committed through 
 | --- | --- | --- | --- |
 | Identity | 4.64× | 1.99× | Async remains faster; advantage is smaller at scale |
 | 5 ms I/O / message | 4.47× | 5.02× | Small-test advantage retained or increased |
-| 32-record bulk | 9.34× | 7.76× | Preliminary; repetitions still running |
+| 32-record bulk | 9.34× | 8.30× | Async remains faster; advantage is smaller at scale |
 | 10% transient retry | 4.35× | — | Pending paired successful trials |
 
 Identity's relative gain falls because original throughput rises from 301 to 693 msg/s, while async stays near 1,397 to 1,382 msg/s. A smaller ratio therefore does not mean async throughput collapsed; the original benefits more from the larger burst.
@@ -171,14 +171,14 @@ Identity's relative gain falls because original throughput rises from 301 to 693
 | Identity | async | 3/3 | 34,673.04 | 65,902.93 | 68,650.39 | 15.65 | 123.23 |
 | 5 ms I/O / message | original_ack | 3/3 | 195,005.14 | 354,668.16 | 369,538.09 | 56.11 | 64.61 |
 | 5 ms I/O / message | async | 3/3 | 36,030.95 | 68,318.88 | 71,232.12 | 15.85 | 124.53 |
-| 32-record bulk | original_ack | 1/1 | 7,282.91 | 41,810.05 | 43,972.33 | 10.59 | 66.21 |
-| 32-record bulk | async | 2/2 | 1,485.08 | 2,696.14 | 2,999.15 | 3.33 | 87.27 |
+| 32-record bulk | original_ack | 3/3 | 9,457.35 | 42,217.84 | 45,347.18 | 14.77 | 66.21 |
+| 32-record bulk | async | 3/3 | 1,342.49 | 2,532.41 | 2,869.48 | 3.10 | 87.27 |
 | 10% transient retry | original_ack | 0/0 | — | — | — | — | — |
 | 10% transient retry | async | 0/0 | — | — | — | — | — |
 
 ### Completion and resilience observations
 
-15 completed 100,000-message trials and 0 incomplete attempts are currently recorded. Completed trials contain 0 missing outputs, 0 immediate duplicates and 0 DLQ records. This is happy-path stress evidence; it does not replace the separate crash/outage tests.
+18 completed 100,000-message trials and 0 incomplete attempts are currently recorded. Completed trials contain 0 missing outputs, 0 immediate duplicates and 0 DLQ records. This is happy-path stress evidence; it does not replace the separate crash/outage tests.
 
 The large-run driver uses incremental unique-ID tracking to avoid repeated large set reconstruction. The payload, workers and measurement boundaries are unchanged; it also emits progress and records explicit output/source-commit stall diagnostics. Per-phase overall deadline is 900 seconds; no-progress deadline is 60 seconds. Execution order alternates across repetitions. Warmup is 128 records, excluded from measurement. Single broker, loopback transport and finite bursts remain the main experimental limits.
 

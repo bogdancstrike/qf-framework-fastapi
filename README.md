@@ -393,7 +393,7 @@ One original trial reached the 60-second deadline and is excluded from successfu
 <!-- SCALE_COMPARISON_START -->
 ## Processing 1,000 versus 100,000 messages
 
-In progress: 15 of 24 planned trials recorded. All 100,000-message numbers are preliminary until three repetitions per engine/workload finish.
+In progress: 18 of 24 planned trials recorded. All 100,000-message numbers are preliminary until three repetitions per engine/workload finish.
 
 Same four partitions, eight worker jobs and three repetitions per engine/workload. The comparator is the **original ACK-gated harness variant**; it changes single-output waiting without repairing the original's other reliability defects. Output time measures the complete input burst to final observed output. Throughput is messages/second; higher is better. Time is seconds; lower is better.
 
@@ -404,7 +404,7 @@ Same four partitions, eight worker jobs and three repetitions per engine/workloa
 | 5 ms I/O / message | 1,000 | 3.36 | 0.75 | 297.69 | 1,331.21 | 4.47× | 3/3 | 3/3 |
 | 5 ms I/O / message | 100,000 | 376.17 | 74.92 | 265.84 | 1,334.74 | 5.02× | 3/3 | 3/3 |
 | 32-record bulk | 1,000 | 0.58 | 0.06 | 1,712.00 | 15,990.23 | 9.34× | 3/3 | 3/3 |
-| 32-record bulk | 100,000 | 47.92 | 6.18 | 2,086.77 | 16,196.72 | 7.76× | 1/1 | 2/2 |
+| 32-record bulk | 100,000 | 49.70 | 5.99 | 2,012.00 | 16,707.12 | 8.30× | 3/3 | 3/3 |
 | 10% transient retry | 1,000 | 3.13 | 0.72 | 319.20 | 1,388.38 | 4.35× | 3/3 | 3/3 |
 | 10% transient retry | 100,000 | — | — | — | — | — | 0/0 | 0/0 |
 
@@ -421,7 +421,7 @@ This separately waits until the broker reports source offsets committed through 
 | 5 ms I/O / message | 1,000 | 3.40 | 0.77 | 293.99 | 1,294.92 |
 | 5 ms I/O / message | 100,000 | 376.21 | 74.92 | 265.81 | 1,334.74 |
 | 32-record bulk | 1,000 | 0.61 | 0.07 | 1,651.10 | 14,313.64 |
-| 32-record bulk | 100,000 | 47.94 | 6.18 | 2,085.83 | 16,195.02 |
+| 32-record bulk | 100,000 | 49.72 | 5.99 | 2,011.07 | 16,705.26 |
 | 10% transient retry | 1,000 | 3.13 | 0.73 | 319.15 | 1,374.37 |
 | 10% transient retry | 100,000 | — | — | — | — |
 <!-- SCALE_COMPARISON_END -->
