@@ -23,7 +23,7 @@ async def normalize(message, consumer_name, metadatas):
 
 > Delivery is **at least once**, with optional Redis replay deduplication. Benchmarks and failure tests are included; their results and limits are documented. This project is an independent successor to QF Flask, not an in-place WSGI replacement.
 
-[Quickstart](#quickstart) · [Worker recipes](#worker-recipes) · [Benchmarks](#measured-benchmarks) · [Tracing](#observability-and-distributed-tracing) · [Migration](docs/Migration.md) · [Full comparison](docs/qf_flask_vs_qf_fastapi_report.md)
+[Quickstart](#quickstart) · [Pipeline tutorial](examples/pipeline/README.md) · [Worker recipes](#worker-recipes) · [Benchmarks](#measured-benchmarks) · [Documentation](docs/README.md) · [Full comparison](docs/qf_flask_vs_qf_fastapi_report.md)
 
 ## What you get
 
@@ -120,6 +120,8 @@ docker compose -p qf-fastapi-test exec -T kafka \
 Local infrastructure endpoints: Kafka `localhost:29092`, Redis `localhost:26379`, Jaeger UI `http://localhost:26686`, OTLP gRPC `http://localhost:24317`. The compose stack is development infrastructure with one Kafka broker; it is not a replicated production deployment.
 
 ## Create your own application
+
+For a verified HTTP → Kafka fanout → Redis join walkthrough, run the [complete pipeline example](examples/pipeline/README.md). It includes topic provisioning, HTTP ingress, two branch workers and a CLI that checks final results. The [getting-started guide](docs/GettingStarted.md) then shows how to create your own package.
 
 ### Native settings and routes
 
@@ -485,7 +487,7 @@ python benchmarks/compare_pipelines.py --messages 1000 --repeats 3
 python benchmarks/compare_http.py --requests 1000 --repeats 3
 ```
 
-The complete local validation snapshot passed **132 tests**, including Kafka/Redis, 10,000-record stress, SIGKILL recovery, broker outage and real Jaeger checks. The default profile runs 120 unit/regression tests and skips 12 opt-in live tests; see [validation evidence](benchmarks/results/validation.json).
+The expanded local suite passed **133 tests**, including the runnable pipeline walkthrough, Kafka/Redis, 10,000-record stress, SIGKILL recovery, broker outage and real Jaeger checks. The default profile runs 120 unit/regression tests and skips 13 opt-in live tests. The earlier benchmark-validation snapshot records 132 tests in [validation evidence](benchmarks/results/validation.json); the [testing guide](docs/Testing.md) includes the additional walkthrough test.
 
 Tests cover failed commits, out-of-order completion, numeric gaps, malformed input, output/DLQ failure, async/sync/bulk/aggregate workers, concurrency, lease renewal, crash replay, overload bounds, shutdown, schema validation and trace propagation. CI runs Python 3.11/3.12/3.13 checks and dedicated service integration tests. See [benchmarks/README.md](benchmarks/README.md) for original-environment setup and every test profile.
 
@@ -510,6 +512,8 @@ docs/            Specifications, architecture, operations and comparison
 
 ## Documentation and contributing
 
+- [Documentation index](docs/README.md), [getting started](docs/GettingStarted.md), [example catalog](examples/README.md)
+- [Worker contracts and cookbook](docs/Workers.md), [testing guide](docs/Testing.md), [troubleshooting](docs/Troubleshooting.md)
 - [Specification](docs/specs.md), [architecture](docs/architecture.md), [task status](docs/tasks.md)
 - [Migration and compatibility](docs/Migration.md), [configuration](docs/Configuration.md)
 - [Operations and failure recovery](docs/Operations.md), [distributed tracing](docs/Tracing.md)

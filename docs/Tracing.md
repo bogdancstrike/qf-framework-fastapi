@@ -1,5 +1,7 @@
 # Distributed tracing with OTLP and Jaeger
 
+For a hands-on HTTP-to-Kafka trace, follow the [pipeline example](../examples/pipeline/README.md#trace-a-complete-job). It runs all worker stages in one service process; the collector verification below checks four independent services.
+
 Install `pip install '.[tracing]'` and configure:
 
 ```dotenv

@@ -83,3 +83,10 @@ Completed checkboxes describe implemented artifacts and executed checks, not uni
 - [x] Update both report copies and README with completed-trial ratios, source-commit throughput, latency and failure evidence.
 - [x] Add explicit output-versus-source-commit stall diagnostics and periodic progress to the benchmark driver.
 - [x] Add management summary distinguishing throughput gains, resilience evidence and deployment limitations.
+
+## Documentation and runnable pipeline follow-up
+
+- [x] Add a documentation index, first-application tutorial, worker contract/cookbook, testing guide and troubleshooting reference.
+- [x] Add an isolated HTTP → Kafka fanout → two branch workers → Redis join example with topic provisioner and bounded output-verification CLI.
+- [x] Test the documented CLI/application against live services, including repeat provisioning, historical output isolation, schema errors and retry/DLQ behavior.
+- [x] Validate local links and Python/JSON snippets, run the expanded 133-test live suite and retain existing performance measurements.

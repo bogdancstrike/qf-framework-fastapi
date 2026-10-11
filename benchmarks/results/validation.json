@@ -53,5 +53,33 @@
       "retry": 2.1327209765926045
     },
     "note": "Retry original has high run-to-run variation; see paired ranges. Historical 5k datasets retain their timeout failures."
+  },
+  "documentation_follow_up": {
+    "validated_at_utc": "2026-10-11T18:46:31.605712+00:00",
+    "full_suite": {
+      "passed": 133,
+      "skipped": 0,
+      "duration_sec": 40.06,
+      "command": "QF_INTEGRATION=1 QF_CHAOS=1 QF_JAEGER=1 QF_STRESS_MESSAGES=10000 python -m pytest -q"
+    },
+    "example_follow_up": {
+      "passed": 1,
+      "checks": [
+        "idempotent topic provisioning",
+        "real HTTP ingress and fanout/Redis join",
+        "historical output isolation on second CLI run",
+        "schema rejection",
+        "three handler attempts then acknowledged diagnostic DLQ"
+      ]
+    },
+    "documentation": {
+      "markdown_files_checked": 17,
+      "python_json_blocks_parsed": 30,
+      "local_links": "passed"
+    },
+    "ruff_check": "passed",
+    "ruff_format": "passed",
+    "wheel_sdist_build": "passed",
+    "performance_measurements": "unchanged; benchmark provenance remains recorded separately"
   }
 }

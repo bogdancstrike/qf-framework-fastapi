@@ -1,5 +1,7 @@
 # Operations and recovery
 
+For a first application, use the [getting-started guide](GettingStarted.md) and [complete pipeline example](../examples/pipeline/README.md). See [worker contracts](Workers.md) before selecting concurrency and idempotency boundaries, and [troubleshooting](Troubleshooting.md) when diagnosing an incident.
+
 ## Install and run
 
 Use Python 3.11 or later and an environment separate from the Flask distribution: both packages export `framework`. Install `pip install '.[tracing]'` from a checkout, or build a wheel with `python -m build`. Application configuration and worker modules belong to your application, outside the installed framework package.

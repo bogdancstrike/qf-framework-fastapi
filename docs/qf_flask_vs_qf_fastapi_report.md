@@ -266,7 +266,7 @@ Further fixes include policy wrappers applied outside worker registration, unsaf
 
 ## Live-service validation and recovery contract
 
-The complete local suite passed **132 tests**: 120 unit/regression checks and 12 live-service checks, including 10,000-record stress. GitHub CI also passed Python 3.11/3.12/3.13 and the dedicated service-integration job. The final validation record is in [validation.json](../benchmarks/results/validation.json). Tests include:
+At benchmark completion, the local suite passed **132 tests**: 120 unit/regression checks and 12 live-service checks, including 10,000-record stress. GitHub CI also passed Python 3.11/3.12/3.13 and the dedicated service-integration job. The final validation record is in [validation.json](../benchmarks/results/validation.json). The documentation follow-up passed the expanded **133-test** live suite, adding the runnable HTTP/fanout/Redis-join application and CLI check. A focused follow-up also verifies repeat provisioning, historical-output isolation, schema errors and the documented retry/DLQ example. Existing benchmark measurements are unchanged. Tests include:
 
 | Test family | Executed behavior | Result / scope |
 |---|---|---|
@@ -299,7 +299,7 @@ Important remaining boundaries:
 
 Latest archived verification: trace **`6b5415a5432febe48e50cfe476681f43`**, **13 spans**, **12 parent-child references**, services `qf-otlp-a, qf-otlp-b, qf-otlp-ingress, qf-otlp-merge`. Every returned span shared the HTTP trace ID; all references resolved within that trace; one `POST /publish` root existed; final Kafka output carried the same trace ID.
 
-[Open the local Jaeger trace](http://localhost:26686/trace/6b5415a5432febe48e50cfe476681f43) while the current development container is running. [Verification JSON](../benchmarks/results/jaeger_verification.json) and [complete Jaeger response](../benchmarks/results/jaeger_trace.json) preserve the proof after ephemeral Jaeger storage resets.
+[Open the local Jaeger trace](http://localhost:26686/trace/41cb43618db5292312a1244651933f87) while the current development container is running. [Verification JSON](../benchmarks/results/jaeger_verification.json) and [complete Jaeger response](../benchmarks/results/jaeger_trace.json) preserve the proof after ephemeral Jaeger storage resets.
 
 Fanout branches share context. The aggregate handler is parented to the completing arrival; prior parts remain visible in the trace but their contexts are not stored as explicit multi-parent Redis join links. Distinct-root inputs are not merged into one trace ID. Bulk outputs preserving source IDs retain each source trace through a producer span linked to the batch; changed/new IDs fall back to the batch trace. Unit tests cover distinct trace IDs in bulk and DLQ. Outbound HTTP/manual publishing needs instrumentation or explicit header injection; see [Tracing.md](Tracing.md).
 
