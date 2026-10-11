@@ -20,7 +20,17 @@
   "docker_build_and_non_root_http_smoke": "passed: readiness, null-model ping and typed echo",
   "original_source_unchanged": true,
   "warning": "Starlette TestClient httpx deprecation; no failures",
-  "ci": "Latest live integration job passed; earlier matrix run failed Markdown snippet formatting, corrected; final run pending",
+  "ci": {
+    "run_url": "https://github.com/bogdancstrike/qf-framework-fastapi/actions/runs/38160536492",
+    "revision": "943ef18f670150576063f93615c079cc0b5a6d19",
+    "status": "passed",
+    "jobs": [
+      "Python 3.11",
+      "Python 3.12",
+      "Python 3.13",
+      "Kafka/Redis/Jaeger integration including broker chaos and crash replay"
+    ]
+  },
   "unexecuted": [
     "multi-broker failover",
     "Redis failover/data loss",
