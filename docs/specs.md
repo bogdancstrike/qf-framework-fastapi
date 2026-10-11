@@ -45,3 +45,13 @@ Write the comprehensive comparison at `../qf_flask_vs_qf_fastapi_report.md` rela
 ## Implemented extension: replay ledger and tracing lineage
 
 Optional Redis source-coordinate deduplication uses renewable claims and completion records with configurable TTL. It narrows completed replay duplication and retains a documented ACK-to-ledger window. Bulk outputs preserving IDs retain their source trace IDs and link producer spans to the batch. Distinct source traces are not rewritten into one trace. Four-process OTLP verification archives real Jaeger results. See Operations, Tracing and the comparison report for measured evidence and limits.
+
+## Hardening and replica acceptance
+
+- `kafka_handler(aggregator=True)` defaults to correlation field `id`; explicit dotted `aggregate_by` also selects aggregation. Retain the compatibility aggregator decorator. Reject bulk joins and missing/non-scalar/empty correlation keys before unsafe execution.
+- Preserve every known ACK and pending producer receipt across local transport retries. Use the same delivery machinery for output and DLQ. A timeout must not cancel a still-valid send receipt and blindly resend it.
+- Reuse Redis claim tokens across ambiguous transport replies. Completion scripts retain a token-valued receipt so a repeated completion succeeds for its owner. Batch independent ledger scripts and renew owned claims with one job heartbeat.
+- Token-check SingleExecute completion, including work finishing before first renewal; reject incompatible sync/async clients. Preserve application errors on failed cleanup and keep borrowed clients application-owned.
+- Terminal ETL errors fail liveness as well as readiness. Configure actual restart supervision; temporary readiness loss alone must not trigger a liveness failure.
+- Verify independent replica processes sharing stable group/worker names: scale 2 → 4, kill an active worker, replace it, and recover every ID and source commit for single/bulk/join workers. Verify committed partial joins across total worker restart and safely idle excess consumers beyond partition count.
+- No-loss restart acceptance is conditional on retained Kafka input and required Redis state. Disclose duplicate windows, finite join/ledger retention and infrastructure failover tests not executed. See [Scaling](Scaling.md).

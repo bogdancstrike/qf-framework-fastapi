@@ -2,6 +2,19 @@
 
 Status is updated as work is implemented and verified. A checked item means its stated artifact or check exists; measured results belong in the comparison report.
 
+## Reliability and replica follow-up
+
+- [x] Preserve confirmed/pending output and DLQ ACK receipts across retries; reproduce partial fanout, late ACK and bulk DLQ faults.
+- [x] Expose custom/default aggregation through `kafka_handler`; reject conflicting bulk joins and missing/invalid correlation keys.
+- [x] Make Redis claim/completion retries token-stable and replay-safe; pipeline source-ledger operations and use one heartbeat per job.
+- [x] Add ACK, ledger replay/wait and aggregate-arrival observability.
+- [x] Benchmark old/new FastAPI source-ledger processing at 10,000 records and two-branch joins at 10,000 correlations, three repeats/version.
+- [x] Audit SingleExecute, common policies, instances namespace, Redis/Kafka resources, bytes/APDU boundaries and document compatibility changes.
+- [x] Verify 2 → 4 independent replicas, active SIGKILL/replacement, retained partial joins after total worker restart and six consumers on four partitions.
+- [x] Fix terminal-runtime liveness so configured Kubernetes probes can restart failed ETL pods.
+- [x] Expand the examples README into a step-by-step tutorial; add a runnable competing-call SingleExecute example.
+- [x] Document 20 future feature proposals separately from implemented scope.
+
 ## Specification and baseline
 
 - [x] Inspect the original Flask framework, worker registry, retry policies, coordinator, aggregation, dynamic endpoints and runner.

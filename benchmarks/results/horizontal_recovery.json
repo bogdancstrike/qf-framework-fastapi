@@ -12,76 +12,76 @@
     "dlq": 0,
     "initial_replicas": 2,
     "scaled_replicas": 4,
-    "killed_pid": 1116619,
-    "replacement_pid": 1117813,
+    "killed_pid": 1163237,
+    "replacement_pid": 1164438,
     "output_pids": [
-      1116620,
-      1116894,
-      1116895,
-      1117813
+      1163238,
+      1163770,
+      1163771,
+      1164438
     ],
-    "kill_to_completed_commits_sec": 10.409518520000347,
+    "kill_to_completed_commits_sec": 10.44304386300064,
     "initial_assignments": [
       {
-        "pid": 1116619,
+        "pid": 1163237,
         "assignment": [
           [
-            "qf-replicas-7347f6717677-a",
-            0
+            "qf-replicas-20a22777ccef-a",
+            1
           ],
           [
-            "qf-replicas-7347f6717677-a",
-            2
+            "qf-replicas-20a22777ccef-a",
+            3
           ]
         ]
       },
       {
-        "pid": 1116620,
+        "pid": 1163238,
         "assignment": [
           [
-            "qf-replicas-7347f6717677-a",
-            1
+            "qf-replicas-20a22777ccef-a",
+            0
           ],
           [
-            "qf-replicas-7347f6717677-a",
-            3
+            "qf-replicas-20a22777ccef-a",
+            2
           ]
         ]
       }
     ],
     "scaled_assignments": [
       {
-        "pid": 1116619,
+        "pid": 1163237,
         "assignment": [
           [
-            "qf-replicas-7347f6717677-a",
-            0
-          ]
-        ]
-      },
-      {
-        "pid": 1116620,
-        "assignment": [
-          [
-            "qf-replicas-7347f6717677-a",
-            2
-          ]
-        ]
-      },
-      {
-        "pid": 1116894,
-        "assignment": [
-          [
-            "qf-replicas-7347f6717677-a",
+            "qf-replicas-20a22777ccef-a",
             3
           ]
         ]
       },
       {
-        "pid": 1116895,
+        "pid": 1163238,
         "assignment": [
           [
-            "qf-replicas-7347f6717677-a",
+            "qf-replicas-20a22777ccef-a",
+            0
+          ]
+        ]
+      },
+      {
+        "pid": 1163770,
+        "assignment": [
+          [
+            "qf-replicas-20a22777ccef-a",
+            2
+          ]
+        ]
+      },
+      {
+        "pid": 1163771,
+        "assignment": [
+          [
+            "qf-replicas-20a22777ccef-a",
             1
           ]
         ]
@@ -89,47 +89,47 @@
     ],
     "replacement_assignments": [
       {
-        "pid": 1116620,
+        "pid": 1163238,
         "assignment": [
           [
-            "qf-replicas-7347f6717677-a",
-            2
-          ]
-        ]
-      },
-      {
-        "pid": 1116894,
-        "assignment": [
-          [
-            "qf-replicas-7347f6717677-a",
-            3
-          ]
-        ]
-      },
-      {
-        "pid": 1116895,
-        "assignment": [
-          [
-            "qf-replicas-7347f6717677-a",
+            "qf-replicas-20a22777ccef-a",
             1
           ]
         ]
       },
       {
-        "pid": 1117813,
+        "pid": 1163770,
         "assignment": [
           [
-            "qf-replicas-7347f6717677-a",
+            "qf-replicas-20a22777ccef-a",
+            3
+          ]
+        ]
+      },
+      {
+        "pid": 1163771,
+        "assignment": [
+          [
+            "qf-replicas-20a22777ccef-a",
+            2
+          ]
+        ]
+      },
+      {
+        "pid": 1164438,
+        "assignment": [
+          [
+            "qf-replicas-20a22777ccef-a",
             0
           ]
         ]
       }
     ],
     "committed_offsets": {
-      "qf-replicas-7347f6717677-a:0": 64,
-      "qf-replicas-7347f6717677-a:1": 64,
-      "qf-replicas-7347f6717677-a:2": 64,
-      "qf-replicas-7347f6717677-a:3": 64
+      "qf-replicas-20a22777ccef-a:0": 64,
+      "qf-replicas-20a22777ccef-a:1": 64,
+      "qf-replicas-20a22777ccef-a:2": 64,
+      "qf-replicas-20a22777ccef-a:3": 64
     }
   },
   "scale-kill-single-ledger-True": {
@@ -145,38 +145,38 @@
     "dlq": 0,
     "initial_replicas": 2,
     "scaled_replicas": 4,
-    "killed_pid": 1118891,
-    "replacement_pid": 1119989,
+    "killed_pid": 1165623,
+    "replacement_pid": 1166833,
     "output_pids": [
-      1118892,
-      1118978,
-      1118979,
-      1119989
+      1165624,
+      1165743,
+      1165744,
+      1166833
     ],
-    "kill_to_completed_commits_sec": 10.43019787600133,
+    "kill_to_completed_commits_sec": 10.380839710998771,
     "initial_assignments": [
       {
-        "pid": 1118891,
+        "pid": 1165623,
         "assignment": [
           [
-            "qf-replicas-a50c7d634ffc-a",
+            "qf-replicas-bb9934ed23b3-a",
             0
           ],
           [
-            "qf-replicas-a50c7d634ffc-a",
+            "qf-replicas-bb9934ed23b3-a",
             2
           ]
         ]
       },
       {
-        "pid": 1118892,
+        "pid": 1165624,
         "assignment": [
           [
-            "qf-replicas-a50c7d634ffc-a",
+            "qf-replicas-bb9934ed23b3-a",
             1
           ],
           [
-            "qf-replicas-a50c7d634ffc-a",
+            "qf-replicas-bb9934ed23b3-a",
             3
           ]
         ]
@@ -184,85 +184,85 @@
     ],
     "scaled_assignments": [
       {
-        "pid": 1118891,
+        "pid": 1165623,
         "assignment": [
           [
-            "qf-replicas-a50c7d634ffc-a",
-            1
-          ]
-        ]
-      },
-      {
-        "pid": 1118892,
-        "assignment": [
-          [
-            "qf-replicas-a50c7d634ffc-a",
-            3
-          ]
-        ]
-      },
-      {
-        "pid": 1118978,
-        "assignment": [
-          [
-            "qf-replicas-a50c7d634ffc-a",
+            "qf-replicas-bb9934ed23b3-a",
             0
           ]
         ]
       },
       {
-        "pid": 1118979,
+        "pid": 1165624,
         "assignment": [
           [
-            "qf-replicas-a50c7d634ffc-a",
+            "qf-replicas-bb9934ed23b3-a",
+            1
+          ]
+        ]
+      },
+      {
+        "pid": 1165743,
+        "assignment": [
+          [
+            "qf-replicas-bb9934ed23b3-a",
             2
+          ]
+        ]
+      },
+      {
+        "pid": 1165744,
+        "assignment": [
+          [
+            "qf-replicas-bb9934ed23b3-a",
+            3
           ]
         ]
       }
     ],
     "replacement_assignments": [
       {
-        "pid": 1118892,
+        "pid": 1165624,
         "assignment": [
           [
-            "qf-replicas-a50c7d634ffc-a",
-            3
-          ]
-        ]
-      },
-      {
-        "pid": 1118978,
-        "assignment": [
-          [
-            "qf-replicas-a50c7d634ffc-a",
+            "qf-replicas-bb9934ed23b3-a",
             0
           ]
         ]
       },
       {
-        "pid": 1118979,
+        "pid": 1165743,
         "assignment": [
           [
-            "qf-replicas-a50c7d634ffc-a",
-            1
+            "qf-replicas-bb9934ed23b3-a",
+            2
           ]
         ]
       },
       {
-        "pid": 1119989,
+        "pid": 1165744,
         "assignment": [
           [
-            "qf-replicas-a50c7d634ffc-a",
-            2
+            "qf-replicas-bb9934ed23b3-a",
+            3
+          ]
+        ]
+      },
+      {
+        "pid": 1166833,
+        "assignment": [
+          [
+            "qf-replicas-bb9934ed23b3-a",
+            1
           ]
         ]
       }
     ],
     "committed_offsets": {
-      "qf-replicas-a50c7d634ffc-a:0": 64,
-      "qf-replicas-a50c7d634ffc-a:1": 64,
-      "qf-replicas-a50c7d634ffc-a:2": 64,
-      "qf-replicas-a50c7d634ffc-a:3": 64
+      "qf-replicas-bb9934ed23b3-a:0": 64,
+      "qf-replicas-bb9934ed23b3-a:1": 64,
+      "qf-replicas-bb9934ed23b3-a:2": 64,
+      "qf-replicas-bb9934ed23b3-a:3": 64
     }
   },
   "scale-kill-bulk-ledger-True": {
@@ -278,124 +278,124 @@
     "dlq": 0,
     "initial_replicas": 2,
     "scaled_replicas": 4,
-    "killed_pid": 1120617,
-    "replacement_pid": 1121763,
+    "killed_pid": 1167833,
+    "replacement_pid": 1168911,
     "output_pids": [
-      1120618,
-      1121108,
-      1121109,
-      1121763
+      1167834,
+      1168253,
+      1168254,
+      1168911
     ],
-    "kill_to_completed_commits_sec": 10.304198490999624,
+    "kill_to_completed_commits_sec": 10.346323235000455,
     "initial_assignments": [
       {
-        "pid": 1120617,
+        "pid": 1167833,
         "assignment": [
           [
-            "qf-replicas-50ea79b9dea9-a",
-            0
+            "qf-replicas-f0424cb47f33-a",
+            1
           ],
           [
-            "qf-replicas-50ea79b9dea9-a",
-            2
+            "qf-replicas-f0424cb47f33-a",
+            3
           ]
         ]
       },
       {
-        "pid": 1120618,
+        "pid": 1167834,
         "assignment": [
           [
-            "qf-replicas-50ea79b9dea9-a",
-            1
+            "qf-replicas-f0424cb47f33-a",
+            0
           ],
           [
-            "qf-replicas-50ea79b9dea9-a",
-            3
+            "qf-replicas-f0424cb47f33-a",
+            2
           ]
         ]
       }
     ],
     "scaled_assignments": [
       {
-        "pid": 1120617,
+        "pid": 1167833,
         "assignment": [
           [
-            "qf-replicas-50ea79b9dea9-a",
-            1
-          ]
-        ]
-      },
-      {
-        "pid": 1120618,
-        "assignment": [
-          [
-            "qf-replicas-50ea79b9dea9-a",
+            "qf-replicas-f0424cb47f33-a",
             2
           ]
         ]
       },
       {
-        "pid": 1121108,
+        "pid": 1167834,
         "assignment": [
           [
-            "qf-replicas-50ea79b9dea9-a",
-            3
+            "qf-replicas-f0424cb47f33-a",
+            0
           ]
         ]
       },
       {
-        "pid": 1121109,
+        "pid": 1168253,
         "assignment": [
           [
-            "qf-replicas-50ea79b9dea9-a",
-            0
+            "qf-replicas-f0424cb47f33-a",
+            1
+          ]
+        ]
+      },
+      {
+        "pid": 1168254,
+        "assignment": [
+          [
+            "qf-replicas-f0424cb47f33-a",
+            3
           ]
         ]
       }
     ],
     "replacement_assignments": [
       {
-        "pid": 1120618,
+        "pid": 1167834,
         "assignment": [
           [
-            "qf-replicas-50ea79b9dea9-a",
-            2
-          ]
-        ]
-      },
-      {
-        "pid": 1121108,
-        "assignment": [
-          [
-            "qf-replicas-50ea79b9dea9-a",
-            3
-          ]
-        ]
-      },
-      {
-        "pid": 1121109,
-        "assignment": [
-          [
-            "qf-replicas-50ea79b9dea9-a",
+            "qf-replicas-f0424cb47f33-a",
             0
           ]
         ]
       },
       {
-        "pid": 1121763,
+        "pid": 1168253,
         "assignment": [
           [
-            "qf-replicas-50ea79b9dea9-a",
+            "qf-replicas-f0424cb47f33-a",
             1
+          ]
+        ]
+      },
+      {
+        "pid": 1168254,
+        "assignment": [
+          [
+            "qf-replicas-f0424cb47f33-a",
+            2
+          ]
+        ]
+      },
+      {
+        "pid": 1168911,
+        "assignment": [
+          [
+            "qf-replicas-f0424cb47f33-a",
+            3
           ]
         ]
       }
     ],
     "committed_offsets": {
-      "qf-replicas-50ea79b9dea9-a:0": 64,
-      "qf-replicas-50ea79b9dea9-a:1": 64,
-      "qf-replicas-50ea79b9dea9-a:2": 64,
-      "qf-replicas-50ea79b9dea9-a:3": 64
+      "qf-replicas-f0424cb47f33-a:0": 64,
+      "qf-replicas-f0424cb47f33-a:1": 64,
+      "qf-replicas-f0424cb47f33-a:2": 64,
+      "qf-replicas-f0424cb47f33-a:3": 64
     }
   },
   "scale-kill-join-ledger-False": {
@@ -411,54 +411,54 @@
     "dlq": 0,
     "initial_replicas": 2,
     "scaled_replicas": 4,
-    "killed_pid": 1122798,
-    "replacement_pid": 1123873,
+    "killed_pid": 1170191,
+    "replacement_pid": 1170879,
     "output_pids": [
-      1122799,
-      1123290,
-      1123291,
-      1123873
+      1170192,
+      1170213,
+      1170214,
+      1170879
     ],
-    "kill_to_completed_commits_sec": 10.409910131000288,
+    "kill_to_completed_commits_sec": 10.412507521001316,
     "initial_assignments": [
       {
-        "pid": 1122798,
+        "pid": 1170191,
         "assignment": [
           [
-            "qf-replicas-e2b56404d81a-a",
+            "qf-replicas-2406974b50d2-a",
             0
           ],
           [
-            "qf-replicas-e2b56404d81a-a",
+            "qf-replicas-2406974b50d2-a",
             2
           ],
           [
-            "qf-replicas-e2b56404d81a-b",
+            "qf-replicas-2406974b50d2-b",
             0
           ],
           [
-            "qf-replicas-e2b56404d81a-b",
+            "qf-replicas-2406974b50d2-b",
             2
           ]
         ]
       },
       {
-        "pid": 1122799,
+        "pid": 1170192,
         "assignment": [
           [
-            "qf-replicas-e2b56404d81a-a",
+            "qf-replicas-2406974b50d2-a",
             1
           ],
           [
-            "qf-replicas-e2b56404d81a-a",
+            "qf-replicas-2406974b50d2-a",
             3
           ],
           [
-            "qf-replicas-e2b56404d81a-b",
+            "qf-replicas-2406974b50d2-b",
             1
           ],
           [
-            "qf-replicas-e2b56404d81a-b",
+            "qf-replicas-2406974b50d2-b",
             3
           ]
         ]
@@ -466,121 +466,121 @@
     ],
     "scaled_assignments": [
       {
-        "pid": 1122798,
+        "pid": 1170191,
         "assignment": [
           [
-            "qf-replicas-e2b56404d81a-a",
-            1
+            "qf-replicas-2406974b50d2-a",
+            0
           ],
           [
-            "qf-replicas-e2b56404d81a-b",
-            1
+            "qf-replicas-2406974b50d2-b",
+            0
           ]
         ]
       },
       {
-        "pid": 1122799,
+        "pid": 1170192,
         "assignment": [
           [
-            "qf-replicas-e2b56404d81a-a",
-            2
-          ],
-          [
-            "qf-replicas-e2b56404d81a-b",
-            2
-          ]
-        ]
-      },
-      {
-        "pid": 1123290,
-        "assignment": [
-          [
-            "qf-replicas-e2b56404d81a-a",
+            "qf-replicas-2406974b50d2-a",
             3
           ],
           [
-            "qf-replicas-e2b56404d81a-b",
+            "qf-replicas-2406974b50d2-b",
             3
           ]
         ]
       },
       {
-        "pid": 1123291,
+        "pid": 1170213,
         "assignment": [
           [
-            "qf-replicas-e2b56404d81a-a",
-            0
+            "qf-replicas-2406974b50d2-a",
+            1
           ],
           [
-            "qf-replicas-e2b56404d81a-b",
-            0
+            "qf-replicas-2406974b50d2-b",
+            1
+          ]
+        ]
+      },
+      {
+        "pid": 1170214,
+        "assignment": [
+          [
+            "qf-replicas-2406974b50d2-a",
+            2
+          ],
+          [
+            "qf-replicas-2406974b50d2-b",
+            2
           ]
         ]
       }
     ],
     "replacement_assignments": [
       {
-        "pid": 1122799,
+        "pid": 1170192,
         "assignment": [
           [
-            "qf-replicas-e2b56404d81a-a",
-            1
+            "qf-replicas-2406974b50d2-a",
+            2
           ],
           [
-            "qf-replicas-e2b56404d81a-b",
-            1
+            "qf-replicas-2406974b50d2-b",
+            2
           ]
         ]
       },
       {
-        "pid": 1123290,
+        "pid": 1170213,
         "assignment": [
           [
-            "qf-replicas-e2b56404d81a-a",
-            3
-          ],
-          [
-            "qf-replicas-e2b56404d81a-b",
-            3
-          ]
-        ]
-      },
-      {
-        "pid": 1123291,
-        "assignment": [
-          [
-            "qf-replicas-e2b56404d81a-a",
+            "qf-replicas-2406974b50d2-a",
             0
           ],
           [
-            "qf-replicas-e2b56404d81a-b",
+            "qf-replicas-2406974b50d2-b",
             0
           ]
         ]
       },
       {
-        "pid": 1123873,
+        "pid": 1170214,
         "assignment": [
           [
-            "qf-replicas-e2b56404d81a-a",
-            2
+            "qf-replicas-2406974b50d2-a",
+            1
           ],
           [
-            "qf-replicas-e2b56404d81a-b",
-            2
+            "qf-replicas-2406974b50d2-b",
+            1
+          ]
+        ]
+      },
+      {
+        "pid": 1170879,
+        "assignment": [
+          [
+            "qf-replicas-2406974b50d2-a",
+            3
+          ],
+          [
+            "qf-replicas-2406974b50d2-b",
+            3
           ]
         ]
       }
     ],
     "committed_offsets": {
-      "qf-replicas-e2b56404d81a-a:0": 64,
-      "qf-replicas-e2b56404d81a-b:0": 64,
-      "qf-replicas-e2b56404d81a-a:1": 64,
-      "qf-replicas-e2b56404d81a-b:1": 64,
-      "qf-replicas-e2b56404d81a-a:2": 64,
-      "qf-replicas-e2b56404d81a-b:2": 64,
-      "qf-replicas-e2b56404d81a-a:3": 64,
-      "qf-replicas-e2b56404d81a-b:3": 64
+      "qf-replicas-2406974b50d2-a:0": 64,
+      "qf-replicas-2406974b50d2-b:0": 64,
+      "qf-replicas-2406974b50d2-a:1": 64,
+      "qf-replicas-2406974b50d2-b:1": 64,
+      "qf-replicas-2406974b50d2-a:2": 64,
+      "qf-replicas-2406974b50d2-b:2": 64,
+      "qf-replicas-2406974b50d2-a:3": 64,
+      "qf-replicas-2406974b50d2-b:3": 64
     }
   },
   "committed-incomplete-join-total-worker-restart": {
@@ -595,18 +595,85 @@
     "duplicates": 0,
     "dlq": 0,
     "committed_first_branch_before_kill": true,
-    "killed_pid": 1124923,
-    "replacement_pid": 1124926,
+    "killed_pid": 1171937,
+    "replacement_pid": 1171940,
     "committed_offsets": {
-      "qf-replicas-8418a7116155-a:0": 16,
-      "qf-replicas-8418a7116155-a:1": 16,
-      "qf-replicas-8418a7116155-a:2": 16,
-      "qf-replicas-8418a7116155-a:3": 16,
-      "qf-replicas-8418a7116155-b:0": 16,
-      "qf-replicas-8418a7116155-b:1": 16,
-      "qf-replicas-8418a7116155-b:2": 16,
-      "qf-replicas-8418a7116155-b:3": 16
+      "qf-replicas-60f94b2f1c41-a:0": 16,
+      "qf-replicas-60f94b2f1c41-a:1": 16,
+      "qf-replicas-60f94b2f1c41-a:2": 16,
+      "qf-replicas-60f94b2f1c41-a:3": 16,
+      "qf-replicas-60f94b2f1c41-b:0": 16,
+      "qf-replicas-60f94b2f1c41-b:1": 16,
+      "qf-replicas-60f94b2f1c41-b:2": 16,
+      "qf-replicas-60f94b2f1c41-b:3": 16
     },
     "scope": "All worker processes replaced; Redis remained available with parts retained within TTL"
+  },
+  "six-replicas-four-partitions": {
+    "scenario": "six-replicas-four-partitions",
+    "broker": "localhost:29092",
+    "partitions_per_topic": 4,
+    "deployment": "independent OS processes; local single broker and Redis",
+    "replicas": 6,
+    "active_consumers": 4,
+    "idle_consumers": 2,
+    "input_records": 96,
+    "expected_unique": 96,
+    "observed_unique": 96,
+    "missing": 0,
+    "duplicates": 0,
+    "dlq": 0,
+    "assignments": [
+      {
+        "pid": 1173054,
+        "assignment": [
+          [
+            "qf-replicas-99d967239a29-a",
+            1
+          ]
+        ]
+      },
+      {
+        "pid": 1173055,
+        "assignment": [
+          [
+            "qf-replicas-99d967239a29-a",
+            2
+          ]
+        ]
+      },
+      {
+        "pid": 1173056,
+        "assignment": []
+      },
+      {
+        "pid": 1173057,
+        "assignment": []
+      },
+      {
+        "pid": 1173058,
+        "assignment": [
+          [
+            "qf-replicas-99d967239a29-a",
+            3
+          ]
+        ]
+      },
+      {
+        "pid": 1173059,
+        "assignment": [
+          [
+            "qf-replicas-99d967239a29-a",
+            0
+          ]
+        ]
+      }
+    ],
+    "committed_offsets": {
+      "qf-replicas-99d967239a29-a:0": 24,
+      "qf-replicas-99d967239a29-a:1": 24,
+      "qf-replicas-99d967239a29-a:2": 24,
+      "qf-replicas-99d967239a29-a:3": 24
+    }
   }
 }

@@ -2,6 +2,14 @@
 
 Correct output, committed progress, recovery and speed are separate checks. This guide explains which command verifies each. Install `pip install -e '.[dev,tracing]'` and run from the repository root.
 
+The current full local profile passes **189 tests**: 170 unit/regression tests and 19 opt-in live tests. It includes six new independent-process replica scenarios. Historical benchmark/test checkpoints remain recorded separately in [validation evidence](../benchmarks/results/validation.json).
+
+```bash
+QF_INTEGRATION=1 python -m pytest tests/test_horizontal_recovery.py -v
+```
+
+This checks scale-up, active SIGKILL/replacement, committed partial joins after total worker restart and excess idle consumers beyond partition count. [Scaling](Scaling.md) explains the persistence/retention assumptions; [Hardening](Hardening.md) reports the separate 10k source-ledger and join performance measurements.
+
 ## Fast local checks
 
 ```bash

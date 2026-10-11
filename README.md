@@ -342,7 +342,7 @@ There is an output-ACK-to-source-commit crash window. Optional `QSINT_IDEMPOTENC
 
 | Endpoint / signal | What to inspect |
 |---|---|
-| `/health/live` | HTTP availability |
+| `/health/live` | HTTP availability; 503 on terminal ETL failure for configured restart supervision |
 | `/health/ready` | Startup/shutdown state and ETL runtime health |
 | `/metrics` | Worker outcomes/retries/duration, queues, uncommitted records, inflight jobs, partition lag, circuits and scheduler delay |
 | JSON logs | Request IDs, active trace/span IDs and structured failure events |
@@ -489,9 +489,25 @@ python benchmarks/compare_pipelines.py --messages 1000 --repeats 3
 python benchmarks/compare_http.py --requests 1000 --repeats 3
 ```
 
-The expanded local suite passed **133 tests**, including the runnable pipeline walkthrough, Kafka/Redis, 10,000-record stress, SIGKILL recovery, broker outage and real Jaeger checks. The default profile runs 120 unit/regression tests and skips 13 opt-in live tests. The earlier benchmark-validation snapshot records 132 tests in [validation evidence](benchmarks/results/validation.json); the [testing guide](docs/Testing.md) includes the additional walkthrough test.
+The expanded local suite passed **189 tests**, including the runnable pipeline walkthrough, Kafka/Redis, 10,000-record stress, SIGKILL recovery, broker outage, six multi-process replica scenarios and real Jaeger checks. The default profile runs 170 unit/regression tests and skips 19 opt-in live tests. Historical 132/133-test checkpoints and the current hardening follow-up are preserved in [validation evidence](benchmarks/results/validation.json).
 
 Tests cover failed commits, out-of-order completion, numeric gaps, malformed input, output/DLQ failure, async/sync/bulk/aggregate workers, concurrency, lease renewal, crash replay, overload bounds, shutdown, schema validation and trace propagation. CI runs Python 3.11/3.12/3.13 checks and dedicated service integration tests. See [benchmarks/README.md](benchmarks/README.md) for original-environment setup and every test profile.
+
+### Reliability follow-up: replay ledger and replicas
+
+The additional 10,000-record before/after benchmark compares the **previous FastAPI runtime with the hardened FastAPI runtime**, with the Redis source ledger enabled in both. It is separate from the historical Flask comparisons above.
+
+| Workload | Before → after time | Before → after throughput | Gain |
+|---|---:|---:|---:|
+| Identity | 7.248 → 6.957 s | 1,380 → 1,437 msg/s | 1.042× |
+| 32-record bulk | 1.632 → 0.796 s | 6,126 → 12,560 msg/s | **2.050×** |
+| Two-topic join: 10,000 correlations / 20,000 inputs | 7.134 → 7.141 s | 1,402 → 1,400 joins/s | 0.999× |
+
+Three trials per workload/version completed with no observed missing, duplicate or DLQ output. Bulk worker CPU dropped about 61%; identity worker CPU increased about 17%, so the improvement has workload-specific costs. Join throughput was essentially unchanged while claim/completion retries became safer. [Complete results and provenance](docs/Hardening.md) explain the different harnesses and limits.
+
+Replicas sharing a stable Kafka group divide partitions and use shared Redis for joins. Tests scaled **2 → 4 processes**, killed an active worker and started a replacement for single/bulk/join processing; every expected ID and source commit recovered. A committed partial join survived full worker replacement, and **six replicas on four partitions** correctly left two consumers idle. These six scenarios observed zero missing outputs; duplicates remain permitted across ACK/completion crash windows.
+
+Pod restart recovery requires Kafka retention and retained Redis join state. It does not cover broker/Redis data loss or expired partial joins. Terminal ETL errors fail both readiness and liveness; Kubernetes readiness alone does not restart containers. See [the scaling guide and probe template](docs/Scaling.md), [utility contracts](docs/Utilities.md), [step-by-step examples](examples/README.md) and [20 proposed features](docs/Roadmap.md).
 
 ## Project map
 

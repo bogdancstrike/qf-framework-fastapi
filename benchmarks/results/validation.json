@@ -81,5 +81,71 @@
     "ruff_format": "passed",
     "wheel_sdist_build": "passed",
     "performance_measurements": "unchanged; benchmark provenance remains recorded separately"
+  },
+  "hardening_follow_up": {
+    "validated_at_utc": "2026-10-11T19:42:00.169949+00:00",
+    "runtime_revision": "7158ed1405737a2bca8848b2c8d9f04828963070",
+    "full_suite": {
+      "passed": 189,
+      "skipped": 0,
+      "duration_sec": 132.83,
+      "command": "QF_INTEGRATION=1 QF_CHAOS=1 QF_JAEGER=1 QF_STRESS_MESSAGES=10000 python -m pytest -q"
+    },
+    "default_profile": {
+      "passed": 170,
+      "opt_in_skips": 19
+    },
+    "horizontal_recovery": {
+      "scenarios": 6,
+      "accepted_input_records": 1504,
+      "expected_unique_final_outputs": 1184,
+      "missing": 0,
+      "duplicates": 0,
+      "dlq": 0,
+      "replicas_tested": [
+        1,
+        2,
+        4,
+        6
+      ],
+      "artifact": "horizontal_recovery.json",
+      "scope": "Independent local OS processes, one Kafka broker and Redis; not an actual Kubernetes cluster or multi-node failover"
+    },
+    "performance": {
+      "source_ledger_trials": 12,
+      "source_ledger_input_instances": 120000,
+      "join_trials": 6,
+      "join_input_instances": 120000,
+      "raw_artifacts": [
+        "reliability_before.json",
+        "reliability_after.json",
+        "joins_before.json",
+        "joins_after.json"
+      ],
+      "provenance": "hardening_provenance.json",
+      "historical_1k_100k": "Preserved without rerunning"
+    },
+    "utility_example": {
+      "command": "python -m examples.single_execute",
+      "executions": 1,
+      "skipped": 4
+    },
+    "documentation": {
+      "markdown_files": 25,
+      "python_json_blocks": 32,
+      "local_links": 194,
+      "errors": []
+    },
+    "ruff_check": "passed",
+    "ruff_format": "passed",
+    "wheel_sdist_build": "passed",
+    "original_source_unchanged": true,
+    "ci_runtime_checkpoint": {
+      "revision": "7158ed1405737a2bca8848b2c8d9f04828963070",
+      "run_url": "https://github.com/bogdancstrike/qf-framework-fastapi/actions/runs/38168381224",
+      "status": "passed",
+      "note": "Runtime/utility checkpoint, before the additional excess-replica scenario and final docs/evidence commit"
+    },
+    "warning": "Starlette TestClient httpx deprecation; no failures"
   }
 }

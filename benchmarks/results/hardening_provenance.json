@@ -1,0 +1,89 @@
+{
+  "date": "2026-10-11",
+  "baseline_runtime_revision": "64350bc63d19ef0bf62dc23070098ff29e02b698",
+  "source_ledger_after_revision": "0a419446a4ac54fa174a16e4527b7395e6609059",
+  "join_after_revision": "7158ed1405737a2bca8848b2c8d9f04828963070",
+  "source_ledger_baseline_note": "Runtime 64350bc; only --idempotency harness argument added before baseline collection. Six baseline trials finished before runtime changes.",
+  "join_baseline_source": "git archive 64350bc src/framework extracted to /tmp/qf-hardening-baseline; PYTHONPATH selected archived runtime; framework_source recorded in each raw JSON.",
+  "collection_order": "Three before trials per workload before runtime changes, then three after; joins three baseline then three after. Not alternating. No concurrent chaos/load suite.",
+  "historical_1k_100k": "Unchanged raw evidence at their recorded older revisions; replay ledger disabled there.",
+  "source_ledger_measured_input_instances": 120000,
+  "join_measured_input_instances": 120000,
+  "summary": {
+    "noop": {
+      "before": {
+        "elapsed_sec": 7.2482677529987996,
+        "messages_per_sec": 1379.6399830652967,
+        "commit_elapsed_sec": 7.261728647999917,
+        "commit_messages_per_sec": 1377.0825769914,
+        "cpu_sec": 2.77,
+        "peak_rss_mib": 55.95703125,
+        "p95_ms": 6615.688900999885
+      },
+      "after": {
+        "elapsed_sec": 6.956906721999985,
+        "messages_per_sec": 1437.4204513015493,
+        "commit_elapsed_sec": 6.989674169999489,
+        "commit_messages_per_sec": 1430.6818539440917,
+        "cpu_sec": 3.2300000000000004,
+        "peak_rss_mib": 60.50390625,
+        "p95_ms": 6345.425895000517
+      },
+      "throughput_ratio": 1.041880830467
+    },
+    "bulk": {
+      "before": {
+        "elapsed_sec": 1.6324741940006788,
+        "messages_per_sec": 6125.671105093035,
+        "commit_elapsed_sec": 1.6434411629998067,
+        "commit_messages_per_sec": 6084.79343534684,
+        "cpu_sec": 1.5100000000000002,
+        "peak_rss_mib": 61.73828125,
+        "p95_ms": 1213.7750000001688
+      },
+      "after": {
+        "elapsed_sec": 0.7961958310006594,
+        "messages_per_sec": 12559.72414152432,
+        "commit_elapsed_sec": 0.8070364270006394,
+        "commit_messages_per_sec": 12391.014414510533,
+        "cpu_sec": 0.5900000000000001,
+        "peak_rss_mib": 57.9296875,
+        "p95_ms": 431.4746110012493
+      },
+      "throughput_ratio": 2.0503425544805784
+    }
+  },
+  "joins": {
+    "before": {
+      "elapsed_sec": 7.1341205409989925,
+      "correlations_per_sec": 1401.7144709752406,
+      "commit_elapsed_sec": 7.157105653999679,
+      "commit_correlations_per_sec": 1397.2128515961751,
+      "p95_ms": 6704.981549999502
+    },
+    "after": {
+      "elapsed_sec": 7.141483642000821,
+      "correlations_per_sec": 1400.2692579434813,
+      "commit_elapsed_sec": 7.174945499000387,
+      "commit_correlations_per_sec": 1393.7388097781648,
+      "p95_ms": 6711.21771000071
+    },
+    "throughput_ratio": 0.9989689676024006
+  },
+  "source_sha256": {
+    "src/framework/etl/processing.py": "fb954abb1416625c3841580064c0f3eb58f065fd10f83a251be4d250c81598e1",
+    "src/framework/streams/delivery.py": "2a9454c0dcf061a666591b81d72d6b36dffdedb7b58d318e3f99e1e17d12a97a",
+    "src/framework/redis/aggregation.py": "a675856f8c3db592d9e6f4c63ae5a1f4163bd882a167a5e1f391dc24afc671bd",
+    "src/framework/redis/idempotency.py": "fdf1f2a0d2d9960979a1c5a0609ea48eb6b1c039dada37b36f7b5587d68398d8",
+    "benchmarks/compare_pipelines.py": "dbb3dc339c32f89590361af1631d32188aa4ea7a420564f2426385d6f08205e7",
+    "benchmarks/pipeline_worker.py": "ede55d1c5d9229c3939379baf35841d7170fbe7fc6ce87f0ed204c78677722f2",
+    "benchmarks/compare_joins.py": "e3cbe803b280b2bd7909a46beb459d08c9220d0863bc36386b43feff2c362354"
+  },
+  "limits": [
+    "Single broker RF1 and local Redis",
+    "Three repetitions, shared host, no formal confidence interval",
+    "Join driver and runtime share one process, unlike worker-isolated pipeline harness",
+    "No claim of exactly-once processing",
+    "Historical 100k comparisons not rerun for this follow-up"
+  ]
+}

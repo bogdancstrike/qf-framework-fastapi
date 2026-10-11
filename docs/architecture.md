@@ -46,7 +46,11 @@ Commit calls are serialized. A candidate snapshot is removed only after commit a
 
 Decode a Kafka value once, require a JSON object, and derive a stable message ID from source coordinates if absent. Call the worker with isolated input/metadata copies. On handler exception, retry with capped exponential full jitter. After exhaustion, publish a diagnostic DLQ envelope and wait for acknowledgement. A `None` result is a successful filter.
 
+Exception to ID synthesis: an aggregator using default correlation `id` requires the application to supply that ID. Inventing a source-coordinate correlation would strand unrelated join parts; missing keys therefore go to DLQ.
+
 Publish all outputs asynchronously, then wait for every acknowledgement before completing input records. Retry transport operations separately so a temporary producer error does not unnecessarily rerun successful user code. Output or DLQ failure after the transport budget terminates the runtime and makes readiness false. Replay is then driven by uncommitted source offsets.
+
+The shared ACK publisher retains per-publication receipt state: successful ACKs are skipped, pending futures survive wait deadlines and known failed futures are retried. Its callbacks expose ACK counts/latency and consume late receipt errors. These are local retry guarantees, not atomic fanout or crash transactions. Terminal ETL errors also fail liveness for configured process supervision.
 
 At-least-once delivery permits duplicates when a process dies between output acknowledgement and input commit. Producer idempotence reduces duplicate sends within a producer session; it does not make user side effects, multiple topics, Redis and Kafka atomic. Applications must use stable identifiers and idempotent downstream operations.
 
@@ -69,6 +73,12 @@ FastAPI supplies ASGI lifecycle and generated schemas. aiokafka and redis.asynci
 ## Optional source replay ledger
 
 When enabled, the processing layer claims each source topic/partition/offset in Redis, starts lease renewal, and filters already completed records before handler execution. It records completion only after output/DLQ acknowledgement and releases leases on failure. Keys are group/worker scoped. This adds Redis dependency to ordinary workers and a finite replay window; it is not a business-ID deduplicator or Kafka/Redis transaction.
+
+Claims reuse stable tokens across retries. The completion tombstone stores the token so its owner's repeated completion can recognize an already successful write. Independent claim/finish/release/renew Lua calls use cached scripts and pipelining; each correlation operation is atomic, while the batch is not. One heartbeat per job renews its owned claims and fences lost ownership.
+
+## Replica ownership
+
+Every process owns its loop, producer, consumer, bounded queues and metrics. Kafka group assignment divides partitions; Redis coordinates join/source-ledger ownership using group and worker namespaces. Stable names and identical topic/worker contracts allow replacements to reuse state. Excess replicas remain idle beyond a topic's partition count. Failed/revoked generations cannot advance successor progress. See [Scaling](Scaling.md) for process-level evidence, deployment probes and the persistence/retention limits.
 
 ## Measured fetch tuning
 

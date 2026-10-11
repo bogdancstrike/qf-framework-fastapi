@@ -11,6 +11,10 @@ Start with the path matching what you need to do.
 | Move an existing Flask/gevent application | [Migration](Migration.md) |
 | Find an exact setting, default or legacy alias | [Configuration reference](Configuration.md) |
 | Deploy, tune, monitor, replay DLQs or recover after failure | [Operations and recovery](Operations.md) |
+| Scale replicas and recover killed processes | [Horizontal scaling and restart recovery](Scaling.md) |
+| Use execution leases, common decorators and owned clients | [Utility audit and contracts](Utilities.md) |
+| Review ACK/Redis hardening and measured before/after costs | [Reliability hardening](Hardening.md) |
+| Choose optional future framework features | [Twenty feature proposals](Roadmap.md) |
 | Follow trace IDs through Kafka, batches and Redis joins | [Distributed tracing](Tracing.md) |
 | Explain measured costs and gains to management | [Flask versus FastAPI report](qf_flask_vs_qf_fastapi_report.md) |
 | Extend or review the framework itself | [Architecture](architecture.md), [specification](specs.md), [task status](tasks.md) |

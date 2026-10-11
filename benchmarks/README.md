@@ -75,3 +75,30 @@ python benchmarks/compare_pipelines.py --messages 100000 --repeats 3 --concurren
 ```
 
 The overall deadline is per warmup/measurement phase, while the stall deadline counts time without a new unique output or advancing source commit. Progress JSON is emitted on stdout. Failed-trial records include phase, stage, received/unique counts and expected/observed source offsets. Incremental ID tracking avoids repeatedly rebuilding a full set while collecting large runs; payloads, workers, delivery settings and measured boundaries are unchanged. Compare successful-trial medians alongside success counts, not by silently dropping failed runs.
+
+## Replay-ledger and join follow-up
+
+These compare previous/hardened FastAPI runtimes; the historical 1k/100k Flask comparisons remain unchanged. Use fresh output filenames for your own measurements:
+
+```bash
+python benchmarks/compare_pipelines.py --messages 10000 --repeats 3 \
+  --engines async --workloads noop,bulk --idempotency --timeout 120 \
+  --output benchmarks/results/reliability_rerun.json
+python benchmarks/compare_joins.py --correlations 10000 --repeats 3 \
+  --output benchmarks/results/joins_rerun.json
+```
+
+The source-ledger flag is supported only by the new worker engines. The archived baseline source-ledger measurement used runtime `64350bc` plus only this harness flag, before runtime edits. The after measurement used `0a41944`. Do not present a run without the ledger as a like-for-like comparison.
+
+The join benchmark uses two four-partition topics, a custom `order.id` correlation, eight jobs and one final output per correlation. Driver and runtime share a process, so CPU/RSS accounting is not comparable with the isolated-worker harness. To select an archived baseline without modifying either framework checkout:
+
+```bash
+mkdir -p /tmp/qf-hardening-baseline
+git archive 64350bc src/framework | tar -x -C /tmp/qf-hardening-baseline
+PYTHONPATH=/tmp/qf-hardening-baseline/src python benchmarks/compare_joins.py \
+  --correlations 10000 --repeats 3 --output benchmarks/results/joins_baseline_rerun.json
+```
+
+Every trial's raw artifact records the actual framework source path. The join after run used `7158ed1`. [Hardening](../docs/Hardening.md) reports medians and regressions/costs; [provenance](results/hardening_provenance.json) records exact revisions and source hashes. Before/after trials ran sequentially rather than alternating, on the same shared host and single-broker development stack.
+
+The separate [horizontal process tests](../docs/Scaling.md) write assignments, output IDs, source commits and kill/replacement timing to [horizontal_recovery.json](results/horizontal_recovery.json). Override `QF_RECOVERY_RESULTS` to archive new recovery evidence elsewhere. They establish correctness under injected failures, not a pod throughput scaling benchmark.

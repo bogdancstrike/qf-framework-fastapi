@@ -64,7 +64,7 @@ class Replicas:
                     return result
                 await asyncio.sleep(0.025)
 
-    def assignments(self, processes):
+    def assignments(self, processes, *, allow_idle=False):
         paths = [self.directory / f"status-{p.pid}.json" for p in processes]
         if not all(path.exists() for path in paths):
             return None
@@ -73,7 +73,7 @@ class Replicas:
         expected = 8 if self.kind == "join" else 4
         if len(owned) != expected or len(set(owned)) != expected:
             return None
-        if not all(snapshot["assignment"] for snapshot in result):
+        if not allow_idle and not all(snapshot["assignment"] for snapshot in result):
             return None
         return result
 
@@ -278,5 +278,36 @@ async def test_committed_incomplete_join_survives_total_worker_restart(cluster, 
             "replacement_pid": replacement.pid,
             "committed_offsets": offsets,
             "scope": "All worker processes replaced; Redis remained available with parts retained within TTL",
+        },
+    )
+
+
+async def test_more_replicas_than_partitions_are_safely_idle(cluster, tmp_path):
+    prefix, topics, producer, output, checker, groups = cluster
+    replicas = Replicas(tmp_path, prefix, "single")
+    groups.append(replicas)
+    (tmp_path / "release").touch()
+    processes = [replicas.start() for _ in range(6)]
+    assignments = await replicas.until(lambda: replicas.assignments(processes, allow_idle=True))
+    assert sum(bool(snapshot["assignment"]) for snapshot in assignments) == 4
+    expected = await publish(producer, topics[:1], 96)
+    values = await collect(output, 96)
+    offsets = await committed(checker, expected)
+    assert len(values) == 96
+    assert all(process.poll() is None for process in processes)
+    evidence(
+        "six-replicas-four-partitions",
+        {
+            "replicas": 6,
+            "active_consumers": 4,
+            "idle_consumers": 2,
+            "input_records": 96,
+            "expected_unique": 96,
+            "observed_unique": 96,
+            "missing": 0,
+            "duplicates": 0,
+            "dlq": 0,
+            "assignments": assignments,
+            "committed_offsets": offsets,
         },
     )

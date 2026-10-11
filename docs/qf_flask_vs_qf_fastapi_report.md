@@ -1,6 +1,6 @@
 # QF Flask/gevent versus QF FastAPI/asyncio
 
-Measurement date: 2026-10-11. Original source revision: `d54b3acae4b902e8715455bc9464ae11565ba739`. Successor: [qf-framework-fastapi](https://github.com/bogdancstrike/qf-framework-fastapi), distribution `qf-fastapi` 2.0.0. The 1,000-message runtime benchmark corresponds to checkpoint `4c5443e`; the 100,000-message runtime/driver corresponds to `943ef18` (see its tracked provenance JSON); later endpoint-model, zero-ID validation and documentation changes do not alter the worker benchmark path. The original source was not modified.
+Measurement date: 2026-10-11. Original source revision: `d54b3acae4b902e8715455bc9464ae11565ba739`. Successor: [qf-framework-fastapi](https://github.com/bogdancstrike/qf-framework-fastapi), distribution `qf-fastapi` 2.0.0. The 1,000-message runtime benchmark corresponds to checkpoint `4c5443e`; the 100,000-message runtime/driver corresponds to `943ef18` (see its tracked provenance JSON); Those are historical snapshots: the reliability/replica follow-up below measures later ACK/Redis changes separately and does not relabel the old 1k/100k results as fresh measurements. The original source was not modified.
 
 ## Management summary
 
@@ -266,7 +266,7 @@ Further fixes include policy wrappers applied outside worker registration, unsaf
 
 ## Live-service validation and recovery contract
 
-At benchmark completion, the local suite passed **132 tests**: 120 unit/regression checks and 12 live-service checks, including 10,000-record stress. GitHub CI also passed Python 3.11/3.12/3.13 and the dedicated service-integration job. The final validation record is in [validation.json](../benchmarks/results/validation.json). The documentation follow-up passed the expanded **133-test** live suite, adding the runnable HTTP/fanout/Redis-join application and CLI check. A focused follow-up also verifies repeat provisioning, historical-output isolation, schema errors and the documented retry/DLQ example. Existing benchmark measurements are unchanged. Tests include:
+At benchmark completion, the local suite passed **132 tests**: 120 unit/regression checks and 12 live-service checks, including 10,000-record stress. GitHub CI also passed Python 3.11/3.12/3.13 and the dedicated service-integration job. The historical validation record is in [validation.json](../benchmarks/results/validation.json). The documentation follow-up passed the expanded **133-test** live suite, adding the runnable HTTP/fanout/Redis-join application and CLI check. A focused follow-up also verifies repeat provisioning, historical-output isolation, schema errors and the documented retry/DLQ example. The reliability/replica follow-up now passes **189 tests** (170 unit/regression and 19 live), in 132.83 seconds locally. Its new measurements are separate from these historical benchmark snapshots. Tests include:
 
 | Test family | Executed behavior | Result / scope |
 |---|---|---|
@@ -292,14 +292,14 @@ Important remaining boundaries:
 - Aggregate tombstone TTL defines the suppression window; reuse of correlation IDs can suppress legitimate new work. Claim loss cannot retract accepted Kafka output or user side effects.
 - Handler attempts reset after process loss. Out-of-order concurrent completion can reorder downstream output, even though source commits remain prefix-safe.
 - Cancellation fences framework publishing and progress; a running synchronous function may continue external effects. Total shutdown can exceed a single phase timeout.
-- HTTP liveness stays available after ETL failure. Readiness returns 503; deployment supervision must restart or alert rather than assuming HTTP process exit.
+- Terminal ETL failure now returns 503 from both readiness and liveness. Configure a Kubernetes liveness probe or worker-only process supervision to restart it; readiness alone does not restart containers.
 - No multi-broker failover, TLS/SASL live test, Redis failover/data-loss test, long soak or production payload certification was executed.
 
 ## OTLP evidence in Jaeger
 
-Latest archived verification: trace **`6b5415a5432febe48e50cfe476681f43`**, **13 spans**, **12 parent-child references**, services `qf-otlp-a, qf-otlp-b, qf-otlp-ingress, qf-otlp-merge`. Every returned span shared the HTTP trace ID; all references resolved within that trace; one `POST /publish` root existed; final Kafka output carried the same trace ID.
+Latest archived verification: trace **`542dd203932b5b29251a72264fd37d3f`**, **13 spans**, **12 parent-child references**, services `qf-otlp-a, qf-otlp-b, qf-otlp-ingress, qf-otlp-merge`. Every returned span shared the HTTP trace ID; all references resolved within that trace; one `POST /publish` root existed; final Kafka output carried the same trace ID.
 
-[Open the local Jaeger trace](http://localhost:26686/trace/41cb43618db5292312a1244651933f87) while the current development container is running. [Verification JSON](../benchmarks/results/jaeger_verification.json) and [complete Jaeger response](../benchmarks/results/jaeger_trace.json) preserve the proof after ephemeral Jaeger storage resets.
+[Open the local Jaeger trace](http://localhost:26686/trace/542dd203932b5b29251a72264fd37d3f) while the current development container is running. [Verification JSON](../benchmarks/results/jaeger_verification.json) and [complete Jaeger response](../benchmarks/results/jaeger_trace.json) preserve the proof after ephemeral Jaeger storage resets.
 
 Fanout branches share context. The aggregate handler is parented to the completing arrival; prior parts remain visible in the trace but their contexts are not stored as explicit multi-parent Redis join links. Distinct-root inputs are not merged into one trace ID. Bulk outputs preserving source IDs retain each source trace through a producer span linked to the batch; changed/new IDs fall back to the batch trace. Unit tests cover distinct trace IDs in bulk and DLQ. Outbound HTTP/manual publishing needs instrumentation or explicit header injection; see [Tracing.md](Tracing.md).
 
@@ -310,9 +310,10 @@ Physical source metrics, excluding tests/benchmarks/docs and including retained 
 | Implementation | Python files | Physical lines | Functions / methods | Largest module (lines, path) |
 | --- | --- | --- | --- | --- |
 | Original | 29 | 5018 | 250 | (1798, 'etl/framework_etl.py') |
-| FastAPI | 35 | 3462 | 233 | (408, 'etl/framework_etl.py') |
+| FastAPI, historical comparison | 35 | 3462 | 233 | (408, 'etl/framework_etl.py') |
+| FastAPI, hardened runtime | 36 | 3745 | 247 | (408, 'etl/framework_etl.py') |
 
-These are descriptive counts, not a complexity or quality score. The original includes commented/dead sections; fewer lines do not establish correctness. The new runtime separates scheduling, commit coordination, processing, Redis aggregation, idempotency, settings, API compilation and tracing. This makes failure contracts easier to inspect and individual dependencies replaceable in tests. The explicit runtime dependency injection used in unit tests improves reviewability without requiring a service container.
+The hardened row includes the shared ACK publisher and audited utilities; the earlier row is preserved as its historical snapshot. These are descriptive counts, not a complexity or quality score. The original includes commented/dead sections; fewer lines do not establish correctness. The new runtime separates scheduling, commit coordination, processing, Redis aggregation, idempotency, settings, API compilation and tracing. This makes failure contracts easier to inspect and individual dependencies replaceable in tests. The explicit runtime dependency injection used in unit tests improves reviewability without requiring a service container.
 
 | Concern | Original | Successor |
 |---|---|---|
@@ -327,6 +328,41 @@ These are descriptive counts, not a complexity or quality score. The original in
 Compatibility is practical, not binary drop-in: install separately, replace WSGI startup, remove gevent monkey patching, migrate Flask globals/extensions, await async Redis/Kafka helpers, and adapt DLQ consumers to envelopes. Legacy worker decorators, function signatures, uppercase Config fields, endpoint JSON concepts and tracing methods are retained. See [Migration.md](Migration.md) for supported keys and deliberate removals.
 
 Remaining maintenance risks include module-level worker registration, a process-owned OpenTelemetry provider, central scheduler complexity and retained APDU domain utilities. Independent apps in one process need registry isolation and one tracing configuration. The current API mapping format intentionally covers JSON handlers rather than all Flask extensions/forms. Tests provide confidence in exercised behavior, not a bug-free guarantee or quantified complete coverage. Dependency ranges need periodic compatibility verification and deployment locking.
+
+## Reliability, replica recovery and utility follow-up
+
+This follow-up compares **previous FastAPI versus hardened FastAPI**, with the source-coordinate Redis ledger enabled. It is separate from the original Flask performance comparison and does not change its 1,000/100,000-message raw results.
+
+| Workload / size | Before time → after time | Before throughput → after throughput | Ratio |
+|---|---:|---:|---:|
+| Identity, 10,000 source records | 7.248 → 6.957 s | 1,380 → 1,437 msg/s | 1.042× |
+| 32-record bulk, 10,000 source records | 1.632 → 0.796 s | 6,126 → 12,560 msg/s | **2.050×** |
+| Join, 10,000 correlations / 20,000 source records | 7.134 → 7.141 s | 1,402 → 1,400 joined outputs/s | 0.999× |
+
+Bulk time fell about 51.2% and worker CPU about 60.9%. Identity CPU increased about 16.6%, so the stronger receipt/observability bookkeeping has a cost despite the small throughput increase. Join throughput is effectively unchanged. Each workload/version has three trials; shared-host samples with before-then-after ordering do not establish statistical significance for small differences. The join driver/runtime share a process, unlike the isolated pipeline worker harness. All 18 follow-up trials completed without observed missing, duplicate or DLQ output: 120,000 source-ledger input-record instances plus 120,000 join input-record instances. Commit completion was checked independently.
+
+The correctness changes retain ACKed/pending producer receipts across transport retries, make Redis claim/completion retries token-stable, pipeline independent source-ledger operations and use one claim heartbeat per job. `@kafka_handler(aggregator=True)` supports default `id`; `aggregate_by="order.id"` supports custom keys. Invalid/missing keys go to DLQ and conflicting bulk joins fail configuration. New ACK/ledger/join metrics expose those outcomes. See [the hardening detail](Hardening.md) and [exact benchmark provenance](../benchmarks/results/hardening_provenance.json).
+
+### Multiple replicas and killed workers
+
+| Scenario | Input records | Unique final outputs | Missing / duplicates / DLQ |
+|---|---:|---:|---:|
+| Single, ledger off: scale 2 → 4, SIGKILL, replacement | 256 | 256 | 0 / 0 / 0 |
+| Single, ledger on: same sequence | 256 | 256 | 0 / 0 / 0 |
+| Bulk, ledger on: same sequence | 256 | 256 | 0 / 0 / 0 |
+| Two-topic join: same sequence | 512 | 256 | 0 / 0 / 0 |
+| Committed partial join, total worker restart, second branch | 128 | 64 | 0 / 0 / 0 |
+| Six replicas sharing four input partitions | 96 | 96 | 0 / 0 / 0 |
+
+These tests use independent OS processes and verify every expected ID plus all source commits. Four surviving/replacement processes produce output after the injected kill; the oversubscribed case has four active and two idle consumers. In the initial four kill/replacement trials, completion took about 10.3–10.4 seconds after SIGKILL, including reassignment and deliberately gated work; this is not an SLA or isolated infrastructure recovery-time measurement. [Raw assignment/recovery evidence](../benchmarks/results/horizontal_recovery.json) is refreshed by subsequent tests, so its latest individual timings are authoritative.
+
+No-loss process restart is conditional on retained Kafka input and required Redis state. Group/worker identities and Redis endpoint must remain stable. Incomplete join inputs already committed in Kafka depend on retained Redis parts; expiry or Redis data loss can prevent final outputs. Output-ACK-to-completion crash windows still allow duplicates. The six scenarios demonstrate selected failure recovery points, not exactly-once business effects, linear throughput scaling, a real Kubernetes rollout or broker/Redis node failure tolerance. [Scaling](Scaling.md) includes the deployment/probe template and exact boundaries.
+
+A deployment bug was also fixed: terminal ETL errors now fail `/health/live` as well as `/health/ready`, allowing a configured Kubernetes liveness probe to restart the container. Readiness alone only removes HTTP Service traffic. Worker-only mode already exits on terminal failure.
+
+The utility audit adds regression coverage for fast SingleExecute ownership loss and fractional leases, stale circuit completions, async/sync client mismatch, cancelled lease cleanup, Kafka/Redis resource ownership, finite JSON serialization and short/extended APDU and byte-length boundaries. `framework.instances` is an empty namespace in both frameworks; application resources belong in lifespan/app state. See [Utilities](Utilities.md) and the expanded [example tutorial](../examples/README.md).
+
+Current validation: **189 passed**, zero skips in the full live profile, including 10,000-message stress, dedicated broker pause, process failures and refreshed real Jaeger evidence. Default tests pass 170 with 19 opt-in skips. The Starlette TestClient/httpx deprecation warning remains. [Twenty proposed features](Roadmap.md) are recommendations awaiting user selection, not implemented capabilities.
 
 ## Reproduction and artifact index
 

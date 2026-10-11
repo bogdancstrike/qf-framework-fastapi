@@ -1,0 +1,57 @@
+{
+  "environment": {
+    "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+    "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+    "cpu_count": 32,
+    "framework_source": "/tmp/qf-hardening-baseline/src/framework/__init__.py"
+  },
+  "parameters": {
+    "correlations": 10000,
+    "repeats": 3,
+    "bootstrap": "localhost:29092",
+    "redis": "redis://localhost:26379/0",
+    "timeout": 120,
+    "output": "benchmarks/results/joins_before.json"
+  },
+  "trials": [
+    {
+      "repeat": 0,
+      "correlations": 10000,
+      "source_records": 20000,
+      "elapsed_sec": 7.1341205409989925,
+      "correlations_per_sec": 1401.7144709752406,
+      "commit_elapsed_sec": 7.157105653999679,
+      "commit_correlations_per_sec": 1397.2128515961751,
+      "p95_ms": 6704.981549999502,
+      "duplicates": 0,
+      "missing": 0,
+      "dlq": 0
+    },
+    {
+      "repeat": 1,
+      "correlations": 10000,
+      "source_records": 20000,
+      "elapsed_sec": 7.162504310999793,
+      "correlations_per_sec": 1396.1597181369275,
+      "commit_elapsed_sec": 7.174369710000974,
+      "commit_correlations_per_sec": 1393.8506662209136,
+      "p95_ms": 6729.033798001183,
+      "duplicates": 0,
+      "missing": 0,
+      "dlq": 0
+    },
+    {
+      "repeat": 2,
+      "correlations": 10000,
+      "source_records": 20000,
+      "elapsed_sec": 7.110779331000231,
+      "correlations_per_sec": 1406.3156138742615,
+      "commit_elapsed_sec": 7.111945361000835,
+      "commit_correlations_per_sec": 1406.0850431776576,
+      "p95_ms": 6675.973547000467,
+      "duplicates": 0,
+      "missing": 0,
+      "dlq": 0
+    }
+  ]
+}
