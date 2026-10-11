@@ -22,21 +22,31 @@ class Publication:
 
 
 class AckPublisher:
+    """ACK receipt state machine; transport supplies the bounded retry policy."""
+
     def __init__(self, producer, metrics, transport, timeout):
         self.producer, self.metrics = producer, metrics
         self.transport, self.timeout = transport, timeout
 
     async def publish(self, publications, worker, kind, check):
+        """Wait for every receipt without resending known successes.
+
+        Resolve metric children once per job. Bulk ACK callbacks otherwise each
+        acquire the Prometheus label-cache lock twice for identical labels.
+        """
+        if not publications:
+            return
+        ack_count = self.metrics.output_acks.labels(worker, kind)
+        ack_duration = self.metrics.output_ack_duration.labels(worker, kind)
+
         def observe(publication, receipt):
             # Always retrieve errors, including receipts finishing after cancellation.
             if receipt.cancelled() or receipt.exception() is not None:
                 return
             if not publication.acknowledged:
                 publication.acknowledged = True
-                self.metrics.output_acks.labels(worker, kind).inc()
-                self.metrics.output_ack_duration.labels(worker, kind).observe(
-                    max(0, time.perf_counter() - publication.started)
-                )
+                ack_count.inc()
+                ack_duration.observe(max(0, time.perf_counter() - publication.started))
 
         async def attempt():
             check()
@@ -78,5 +88,4 @@ class AckPublisher:
                     observe(publication, receipt)
             check()
 
-        if publications:
-            await self.transport(lambda: asyncio.wait_for(attempt(), self.timeout), worker)
+        await self.transport(lambda: asyncio.wait_for(attempt(), self.timeout), worker)

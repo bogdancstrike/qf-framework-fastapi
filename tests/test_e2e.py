@@ -189,7 +189,9 @@ async def test_real_redis_lease_renewal(settings, spec):
     settings.redis_url = __import__("pydantic").SecretStr(REDIS)
     settings.aggregate_lease_sec = 3
     store = AggregationStore(settings)
-    spec = replace(spec, name="lease-" + uuid.uuid4().hex, topics_in=["a", "b"])
+    spec = replace(
+        spec, name="lease-" + uuid.uuid4().hex, topics_in=["a", "b"], aggregator_timeout_sec=1
+    )
     await store.start()
     try:
         await store.claim(spec, "1", "a", {"a": 1})
@@ -197,6 +199,9 @@ async def test_real_redis_lease_renewal(settings, spec):
         async with store.heartbeat(claim):
             await asyncio.sleep(3.2)
             assert await store.client.get(claim.keys[1]) == claim.token
+            assert await store.client.exists(claim.keys[0])
+            retried = await store.claim(spec, "1", "b", {"b": 1}, token=claim.token)
+            assert retried.payload == {"a": 1, "b": 1}
             assert not claim.lost
         await store.finish(claim, 1)
     finally:

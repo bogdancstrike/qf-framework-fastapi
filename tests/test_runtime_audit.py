@@ -13,7 +13,8 @@ from framework.api.dynamic import generate_endpoints_from_config
 from framework.api.server import create_app
 from framework.app import FrameworkApp
 from framework.config import FrameworkSettings, load_framework_settings
-from framework.decorators.intern import CircuitBreakerConfig
+from framework.decorators.intern import CircuitBreakerConfig, RateLimitConfig
+from framework.decorators.kafka_workers import validate_workers
 from framework.etl.framework_etl import KafkaRuntime
 from framework.etl.processing import Processor
 from framework.observability import Metrics
@@ -77,6 +78,59 @@ async def test_cancelled_half_open_job_releases_probe(settings, spec, fake_modul
         assert policy.probe
         await runtime.revoke({runtime.consumer.tp})
         assert not policy.probe, "Cancellation must not block all future half-open probes"
+    finally:
+        await runtime.stop()
+
+
+async def test_probe_cancelled_before_first_task_step_releases_admission(
+    settings, spec, fake_module
+):
+    runtime = KafkaRuntime(
+        settings,
+        consumer=Consumer(),
+        producer=Producer(),
+        workers=[replace(spec, circuit_breaker=CircuitBreakerConfig(1, 30))],
+    )
+    await runtime.start()
+    try:
+        policy = runtime.admission[spec.name]
+        policy.open_until = 0.0001
+        runtime.enqueue(runtime.consumer.tp, [record()])
+        runtime.tick()
+        task = next(iter(runtime.active[spec.name]))
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        assert not policy.probe
+        assert not runtime.producer.sent
+    finally:
+        await runtime.stop()
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"kind": "unknown"},
+        {"fn": None},
+        {"max_workers": 1.5},
+        {"topics_out": ["out", "out"]},
+        {"rate_limit": RateLimitConfig(float("nan"), 1)},
+        {"rate_limit": RateLimitConfig(float("inf"), 1)},
+    ],
+)
+def test_invalid_injected_worker_contracts_fail_fast(spec, change):
+    with pytest.raises(ValueError):
+        validate_workers([replace(spec, **change)])
+
+
+async def test_running_worker_configuration_is_a_snapshot(settings, spec, fake_module):
+    worker = replace(spec, metadatas={"nested": {"value": "original"}})
+    runtime = KafkaRuntime(settings, consumer=Consumer(), producer=Producer(), workers=[worker])
+    await runtime.start()
+    try:
+        worker.topics_in.append("mutated")
+        worker.metadatas["nested"]["value"] = "mutated"
+        assert runtime.workers[0].topics_in == ["in"]
+        assert runtime.workers[0].metadatas == {"nested": {"value": "original"}}
     finally:
         await runtime.stop()
 
@@ -213,4 +267,54 @@ async def test_lifespan_flushes_tracing_even_when_runtime_cleanup_fails(monkeypa
     with pytest.raises(RuntimeError, match="cleanup failed"):
         async with app.router.lifespan_context(app):
             pass
+    assert flushed == [True]
+
+
+async def test_startup_error_survives_secondary_cleanup_error(monkeypatch):
+    from framework.app import runner
+
+    flushed = []
+    monkeypatch.setattr(runner, "shutdown_tracing", lambda: flushed.append(True))
+
+    class Runtime:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def start(self):
+            raise ValueError("primary startup failure")
+
+        async def stop(self):
+            raise RuntimeError("secondary cleanup failure")
+
+    app = FrameworkApp(
+        FrameworkSettings(
+            worker_modules=["x"],
+            kafka_bootstrap_servers="x",
+            consumer_name="x",
+            enable_dynamic_endpoints=False,
+        ),
+        runtime_factory=Runtime,
+    ).build_app()
+    with pytest.raises(ValueError, match="primary startup failure"):
+        async with app.router.lifespan_context(app):
+            pass
+    assert flushed == [True]
+
+
+async def test_worker_factory_failure_restores_signal_handlers(monkeypatch):
+    from framework.app import runner
+
+    loop = asyncio.get_running_loop()
+    added, removed, flushed = [], [], []
+    monkeypatch.setattr(loop, "add_signal_handler", lambda signum, callback: added.append(signum))
+    monkeypatch.setattr(loop, "remove_signal_handler", lambda signum: removed.append(signum))
+    monkeypatch.setattr(runner, "shutdown_tracing", lambda: flushed.append(True))
+
+    def factory(*args, **kwargs):
+        raise ValueError("factory failure")
+
+    framework = FrameworkApp(FrameworkSettings(enable_etl=False), runtime_factory=factory)
+    with pytest.raises(ValueError, match="factory failure"):
+        await framework.run_worker()
+    assert added == removed and len(removed) == 2
     assert flushed == [True]

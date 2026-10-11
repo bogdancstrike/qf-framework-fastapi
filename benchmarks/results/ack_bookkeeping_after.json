@@ -1,0 +1,37 @@
+{
+  "scope": "ACK bookkeeping only; immediate in-memory receipts; no Kafka/Redis/handler/commit",
+  "python": "3.12.3",
+  "source_sha256": "a8fd63ea3dbc9efd64d0bf09dd0060adcf173c6f6f4c3a36ce6644458466c554",
+  "messages_per_trial": 100000,
+  "batch_size": 100,
+  "trials": [
+    {
+      "elapsed_sec": 0.25265532699995674,
+      "cpu_sec": 0.25259832299999996,
+      "acknowledged": 100000.0
+    },
+    {
+      "elapsed_sec": 0.2457283820003795,
+      "cpu_sec": 0.24571476800000003,
+      "acknowledged": 100000.0
+    },
+    {
+      "elapsed_sec": 0.24978597900008026,
+      "cpu_sec": 0.24976472500000002,
+      "acknowledged": 100000.0
+    },
+    {
+      "elapsed_sec": 0.24894121500074107,
+      "cpu_sec": 0.24892850599999994,
+      "acknowledged": 100000.0
+    },
+    {
+      "elapsed_sec": 0.24913122900034068,
+      "cpu_sec": 0.24910023999999997,
+      "acknowledged": 100000.0
+    }
+  ],
+  "median_elapsed_sec": 0.24913122900034068,
+  "median_cpu_sec": 0.24910023999999997,
+  "profiled": false
+}

@@ -1,0 +1,204 @@
+{
+  "python": "3.12.3",
+  "requested_trials": 5,
+  "scope": "real Kafka RF1/Redis; five stages in one process; deterministic transient handler and pre-enqueue transport failures",
+  "source_sha256": {
+    "etl/framework_etl.py": "4357103d3c1f4ecae9631d8a4985ea88d7132ca3dac6417d490b7e7c9eba37cc",
+    "etl/processing.py": "a55e7314aef33a5c1e8ed9d73889b9b403bd55b312cdf1bda3e93554a3990b6f",
+    "etl/policies.py": "2133a4864d07d666e63965b2afd623ee993a91f1b8e46c2383d69344d7c6c84f",
+    "redis/aggregation.py": "09578ccc203dabf3298fedda976243edf12097c786cf72de7fcc3553eac66d52",
+    "streams/delivery.py": "a8fd63ea3dbc9efd64d0bf09dd0060adcf173c6f6f4c3a36ce6644458466c554"
+  },
+  "trials": [
+    {
+      "trial": 1,
+      "messages": 5000,
+      "workers": 5,
+      "idempotency_enabled": false,
+      "bulk_stage": null,
+      "graceful_runtime_restarts": 0,
+      "elapsed_to_final_output_sec_including_startup": 4.074068175999855,
+      "elapsed_through_verification_sec": 7.080209390000164,
+      "processed_unique_per_stage": [
+        5000,
+        5000,
+        5000,
+        5000,
+        5000
+      ],
+      "handler_retries_per_stage": [
+        244,
+        244,
+        244,
+        244,
+        244
+      ],
+      "transport_retries": 52,
+      "committed_partitions": 20,
+      "topic_counts": {
+        "qf-pipeline-proof-db5ac37daef9-0": 5000,
+        "qf-pipeline-proof-db5ac37daef9-1": 5000,
+        "qf-pipeline-proof-db5ac37daef9-2": 5000,
+        "qf-pipeline-proof-db5ac37daef9-3": 5000,
+        "qf-pipeline-proof-db5ac37daef9-4": 5000,
+        "qf-pipeline-proof-db5ac37daef9-5": 5000
+      },
+      "final_outputs": 5000,
+      "missing": 0,
+      "duplicates": 0,
+      "dlq": 0
+    },
+    {
+      "trial": 2,
+      "messages": 5000,
+      "workers": 5,
+      "idempotency_enabled": true,
+      "bulk_stage": null,
+      "graceful_runtime_restarts": 0,
+      "elapsed_to_final_output_sec_including_startup": 7.644825145000141,
+      "elapsed_through_verification_sec": 10.651451718998942,
+      "processed_unique_per_stage": [
+        5000,
+        5000,
+        5000,
+        5000,
+        5000
+      ],
+      "handler_retries_per_stage": [
+        244,
+        244,
+        244,
+        244,
+        244
+      ],
+      "transport_retries": 52,
+      "committed_partitions": 20,
+      "topic_counts": {
+        "qf-pipeline-proof-f421f85b2aa2-0": 5000,
+        "qf-pipeline-proof-f421f85b2aa2-1": 5000,
+        "qf-pipeline-proof-f421f85b2aa2-2": 5000,
+        "qf-pipeline-proof-f421f85b2aa2-3": 5000,
+        "qf-pipeline-proof-f421f85b2aa2-4": 5000,
+        "qf-pipeline-proof-f421f85b2aa2-5": 5000
+      },
+      "final_outputs": 5000,
+      "missing": 0,
+      "duplicates": 0,
+      "dlq": 0
+    },
+    {
+      "trial": 3,
+      "messages": 5000,
+      "workers": 5,
+      "idempotency_enabled": false,
+      "bulk_stage": null,
+      "graceful_runtime_restarts": 0,
+      "elapsed_to_final_output_sec_including_startup": 4.037554886999715,
+      "elapsed_through_verification_sec": 7.042388801000925,
+      "processed_unique_per_stage": [
+        5000,
+        5000,
+        5000,
+        5000,
+        5000
+      ],
+      "handler_retries_per_stage": [
+        244,
+        244,
+        244,
+        244,
+        244
+      ],
+      "transport_retries": 52,
+      "committed_partitions": 20,
+      "topic_counts": {
+        "qf-pipeline-proof-47eded7f2884-0": 5000,
+        "qf-pipeline-proof-47eded7f2884-1": 5000,
+        "qf-pipeline-proof-47eded7f2884-2": 5000,
+        "qf-pipeline-proof-47eded7f2884-3": 5000,
+        "qf-pipeline-proof-47eded7f2884-4": 5000,
+        "qf-pipeline-proof-47eded7f2884-5": 5000
+      },
+      "final_outputs": 5000,
+      "missing": 0,
+      "duplicates": 0,
+      "dlq": 0
+    },
+    {
+      "trial": 4,
+      "messages": 5000,
+      "workers": 5,
+      "idempotency_enabled": true,
+      "bulk_stage": 2,
+      "graceful_runtime_restarts": 0,
+      "elapsed_to_final_output_sec_including_startup": 7.149341324000488,
+      "elapsed_through_verification_sec": 10.154824188999555,
+      "processed_unique_per_stage": [
+        5000,
+        5000,
+        5000,
+        5000,
+        5000
+      ],
+      "handler_retries_per_stage": [
+        244,
+        244,
+        232,
+        244,
+        244
+      ],
+      "transport_retries": 52,
+      "committed_partitions": 20,
+      "topic_counts": {
+        "qf-pipeline-proof-4b1b6a9e7448-0": 5000,
+        "qf-pipeline-proof-4b1b6a9e7448-1": 5000,
+        "qf-pipeline-proof-4b1b6a9e7448-2": 5000,
+        "qf-pipeline-proof-4b1b6a9e7448-3": 5000,
+        "qf-pipeline-proof-4b1b6a9e7448-4": 5000,
+        "qf-pipeline-proof-4b1b6a9e7448-5": 5000
+      },
+      "final_outputs": 5000,
+      "missing": 0,
+      "duplicates": 0,
+      "dlq": 0
+    },
+    {
+      "trial": 5,
+      "messages": 5000,
+      "workers": 5,
+      "idempotency_enabled": true,
+      "bulk_stage": null,
+      "graceful_runtime_restarts": 1,
+      "elapsed_to_final_output_sec_including_startup": 7.9193402559994865,
+      "elapsed_through_verification_sec": 10.924450278000222,
+      "processed_unique_per_stage": [
+        5000,
+        5000,
+        5000,
+        5000,
+        5000
+      ],
+      "handler_retries_per_stage": [
+        244,
+        244,
+        244,
+        244,
+        244
+      ],
+      "transport_retries": 52,
+      "committed_partitions": 20,
+      "topic_counts": {
+        "qf-pipeline-proof-0fad23f5d903-0": 5000,
+        "qf-pipeline-proof-0fad23f5d903-1": 5000,
+        "qf-pipeline-proof-0fad23f5d903-2": 5000,
+        "qf-pipeline-proof-0fad23f5d903-3": 5000,
+        "qf-pipeline-proof-0fad23f5d903-4": 5000,
+        "qf-pipeline-proof-0fad23f5d903-5": 5000
+      },
+      "final_outputs": 5000,
+      "missing": 0,
+      "duplicates": 0,
+      "dlq": 0
+    }
+  ]
+}
