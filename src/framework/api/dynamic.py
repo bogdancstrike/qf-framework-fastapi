@@ -42,9 +42,12 @@ class LegacyRequest:
 
 
 def get_model(api, models, model_name):
+    """Compile a named schema; null and empty object definitions mean no model."""
     definition = (models or {}).get(model_name)
-    if not definition:
+    if definition is None or definition == {}:
         return None
+    if not isinstance(definition, dict):
+        raise ValueError(f"Model '{model_name}' must be an object or null")
     fields = {}
     for name, entry in definition.items():
         kind = entry.get("type", "string")
@@ -155,6 +158,13 @@ def make_endpoint(handler, operation, model, path_types, method):
 
 
 def generate_endpoints_from_config(api, path="maps/endpoint.json", wait=0):
+    """Validate the mapping before attaching routes; no imports occur per request.
+
+    Parameter names do not distinguish route patterns: /items/{id} and
+    /items/{other} are conflicting routes for the same HTTP method. Model-free
+    endpoints accept an optional JSON body, while named schemas use FastAPI's
+    typed validation. Invalid configuration fails application construction.
+    """
     if wait:
         raise ValueError("Startup sleeps are unsupported; use lifespan readiness")
     with open(path, encoding="utf-8") as source:
@@ -162,18 +172,28 @@ def generate_endpoints_from_config(api, path="maps/endpoint.json", wait=0):
     namespaces = {ns["name"]: ns for ns in config["namespaces"]}
     if len(namespaces) != len(config["namespaces"]):
         raise ValueError("Duplicate namespace")
-    definitions = config.get("models") or {}
+    definitions = config.get("models")
+    if definitions is None:
+        definitions = {}
     if not isinstance(definitions, dict):
         raise ValueError("models must be an object or null")
     models = {name: get_model(api, definitions, name) for name in definitions}
-    seen = {(r.path, method) for r in api.routes for method in getattr(r, "methods", [])}
+
+    def route_pattern(uri):
+        # Preserve converters (notably :path), but erase parameter spelling.
+        return re.sub(r"{[^}:]+(?P<converter>:[^}]+)?}", r"{\g<converter>}", uri)
+
+    seen = {
+        (route_pattern(r.path), method) for r in api.routes for method in getattr(r, "methods", [])
+    }
+    operation_ids = {getattr(r, "operation_id", None) for r in api.routes}
     compiled = []
     for entry in config["endpoints"]:
         ns, operation = entry["namespace"], entry["operation_name"]
         if ns not in namespaces:
             raise ValueError(f"Unknown namespace: {ns}")
         model_name = entry.get("model_name")
-        if model_name and model_name not in models:
+        if model_name is not None and model_name not in models:
             raise ValueError(f"Unknown model: {model_name}")
         target = entry["exec_method"]
         handler = getattr(importlib.import_module(target["module_name"]), target["method_name"])
@@ -184,9 +204,13 @@ def generate_endpoints_from_config(api, path="maps/endpoint.json", wait=0):
             method = method.upper()
             if method not in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}:
                 raise ValueError(f"Unsupported HTTP method: {method}")
-            if (uri, method) in seen:
+            if (route_pattern(uri), method) in seen:
                 raise ValueError(f"Duplicate route: {method} {uri}")
-            seen.add((uri, method))
+            seen.add((route_pattern(uri), method))
+            operation_id = f"{ns}_{operation}_{method.lower()}"
+            if operation_id in operation_ids:
+                raise ValueError(f"Duplicate operation ID: {operation_id}")
+            operation_ids.add(operation_id)
             compiled.append((uri, method, ns, operation, models.get(model_name), types, handler))
     for uri, method, ns, operation, model, types, handler in compiled:
         api.add_api_route(

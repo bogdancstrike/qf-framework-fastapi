@@ -15,7 +15,7 @@ from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, ConsumerRebalanceListen
 
 from ..commons.logger import logger
 from ..config import FrameworkSettings
-from ..decorators.kafka_workers import all_workers
+from ..decorators.kafka_workers import all_workers, validate_workers
 from ..observability import Metrics
 from .coordinator import CommitCoordinator
 from .policies import Admission
@@ -44,6 +44,14 @@ class RebalanceListener(ConsumerRebalanceListener):
 
 
 class KafkaRuntime:
+    """One process's scheduler, transports and contiguous commit coordinator.
+
+    Constructor injection supports test transports and application composition.
+    This runtime starts/stops supplied transports too; an AggregationStore with
+    an injected Redis client leaves that underlying client application-owned.
+    Runtime instances are single-use and all methods run on their owning loop.
+    """
+
     def __init__(
         self,
         settings: FrameworkSettings,
@@ -100,6 +108,12 @@ class KafkaRuntime:
                 )
 
     async def start(self):
+        """Validate workers and connect within a bounded startup budget.
+
+        Any startup failure closes partially acquired resources and propagates.
+        Successful connection starts a monitored loop; later terminal failures
+        set error/ready for HTTP probes and the worker-only runner.
+        """
         if self.task is not None or self._closed:
             raise RuntimeError("Runtime instances can only start once")
         try:
@@ -112,7 +126,7 @@ class KafkaRuntime:
     async def _start(self):
         for module in self.settings.worker_modules:
             importlib.import_module(module)
-        self.workers = list(all_workers() if self.workers is None else self.workers)
+        self.workers = validate_workers(all_workers() if self.workers is None else self.workers)
         if not self.workers:
             raise RuntimeError("No Kafka workers registered")
         self.by_topic = {topic: w for w in self.workers for topic in w.topics_in}
@@ -181,20 +195,30 @@ class KafkaRuntime:
                 and (time.monotonic() - oldest) * 1000 < spec.batch_timeout_ms
             ):
                 break
-            if not admission.allow():
+            generation = admission.acquire()
+            if generation is None:
                 break
             n = min(len(partition.pending), spec.batch_size) if spec.bulk_mode else 1
             records = [partition.pending.popleft()[0] for _ in range(n)]
             task = asyncio.create_task(
-                self.job(spec, tp, partition, records), name=f"qf-{spec.name}"
+                self.job(spec, tp, partition, records, generation), name=f"qf-{spec.name}"
             )
             active.add(task)
             partition.tasks.add(task)
 
-            def done(future, active=active, partition=partition):
+            def done(
+                future,
+                active=active,
+                partition=partition,
+                admission=admission,
+                generation=generation,
+            ):
                 active.discard(future)
                 partition.tasks.discard(future)
                 self.wakeup.set()
+                if future.cancelled():
+                    # A task cancelled before its first step never enters job().
+                    admission.abandon(generation)
                 if not future.cancelled():
                     error = future.exception()
                     if error is not None and not isinstance(error, StaleAssignment):
@@ -204,17 +228,21 @@ class KafkaRuntime:
 
             task.add_done_callback(done)
 
-    async def job(self, spec, tp, partition, records):
+    async def job(self, spec, tp, partition, records, generation):
+        """Advance source progress only after handler/output/ledger completion."""
         self.metrics.inflight.labels(spec.name).inc()
         try:
             ok = await self.processor.handle(spec, records, lambda: self.valid(tp, partition))
             if ok is False:
-                self.admission[spec.name].failure()
+                self.admission[spec.name].failure(generation)
             else:
-                self.admission[spec.name].success()
+                self.admission[spec.name].success(generation)
             self.coordinator.complete(tp, [r.offset for r in records], partition.progress)
+        except (asyncio.CancelledError, StaleAssignment):
+            self.admission[spec.name].abandon(generation)
+            raise
         except Exception:
-            self.admission[spec.name].failure()
+            self.admission[spec.name].failure(generation)
             raise
         finally:
             self.metrics.inflight.labels(spec.name).dec()
@@ -320,6 +348,12 @@ class KafkaRuntime:
             self.metrics.ready.set(0)
 
     async def revoke(self, revoked):
+        """Drain owned jobs, fence unfinished work, then commit safe prefixes.
+
+        Unstarted and cancelled records stay uncommitted for the next owner.
+        A synchronous function already executing in a thread cannot be killed;
+        it must make external side effects independently idempotent.
+        """
         targets = {tp: self.partitions[tp] for tp in revoked if tp in self.partitions}
         # Stop dispatching new work but let already-running jobs finish while assignment is owned.
         for p in targets.values():

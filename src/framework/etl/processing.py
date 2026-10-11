@@ -28,6 +28,14 @@ class StaleAssignment(RuntimeError):
 
 
 class Processor:
+    """Execute business work with separate application and transport retry budgets.
+
+    True/None report successful processing (including filtering/storing a part),
+    False reports an application failure safely routed to DLQ. DeliveryError or
+    StaleAssignment leave source work replayable. External business effects are
+    outside the Kafka/Redis completion boundary and must handle replay.
+    """
+
     def __init__(self, settings, producer, metrics, executors=None, aggregation=None):
         self.settings, self.producer, self.metrics = settings, producer, metrics
         self.executors = executors or {}
@@ -66,6 +74,11 @@ class Processor:
                 await self.delay(attempt)
 
     async def invoke(self, spec, payload):
+        """Isolate mutable inputs per attempt and propagate context to sync threads.
+
+        Cancellation stops awaiting a synchronous handler, not its running
+        thread. Native coroutine handlers remain the recommended execution path.
+        """
         args = (copy.deepcopy(payload), self.settings.consumer_name, copy.deepcopy(spec.metadatas))
         if inspect.iscoroutinefunction(spec.fn):
             return await spec.fn(*args)
@@ -188,6 +201,7 @@ class Processor:
         )
 
     async def handle(self, spec, records, valid):
+        """Process records under assignment and optional source-ledger ownership."""
         if self.deduplicator and spec.kind != "aggregator":
             async with self.deduplicator.filter(spec, records, valid) as selection:
                 selected, owned = selection
@@ -265,6 +279,12 @@ class Processor:
                 return True
 
     async def aggregate(self, spec, record, payload, valid):
+        """Store a part or process a complete join under one renewable owner token.
+
+        Stored parts can be committed after Redis acknowledgement. A complete
+        join is finished only after output or terminal DLQ acknowledgement.
+        Returning the handler outcome keeps join circuit policies meaningful.
+        """
         try:
             key = compute_aggregate_key(spec, payload)
         except ValueError as exc:
@@ -291,11 +311,14 @@ class Processor:
                 def owned():
                     return valid() and not claim.lost
 
-                await self.execute(spec, [record], claim.payload, owned, aggregate=claim.payload)
+                outcome = await self.execute(
+                    spec, [record], claim.payload, owned, aggregate=claim.payload
+                )
                 self.check(owned)
                 await self.transport(
                     lambda: self.aggregation.finish(claim, spec.aggregator_timeout_sec), spec.name
                 )
+                return outcome
         finally:
             try:
                 await self.aggregation.release(claim)

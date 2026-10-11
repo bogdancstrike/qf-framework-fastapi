@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 import math
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from typing import Any, Callable, Dict, List, Optional, Literal
 
@@ -48,6 +49,13 @@ def ensure_message_id(message: dict) -> str:
 
 @dataclass(frozen=True)
 class WorkerSpec:
+    """Worker configuration, snapshotted and validated before runtime startup.
+
+    The function receives (message_or_batch, consumer_name, metadatas). Policy
+    decorators replace this frozen record rather than wrapping runtime retries.
+    Mutable topic lists and metadata are copied at the runtime boundary.
+    """
+
     kind: WorkerKind
     name: str
     topics_in: List[str]
@@ -90,29 +98,52 @@ def update_registered_worker_policy(worker_name: str, key: str, value: Any) -> N
         _WORKERS_BY_NAME[worker_name] = replace(spec, rate_limit=value)
 
 
-def register_worker(spec: WorkerSpec) -> None:
+def validate_worker(spec: WorkerSpec) -> None:
+    """Validate one specification without mutating the global decorator registry."""
+    if spec.kind not in {"handler", "aggregator"}:
+        raise ValueError(f"Unknown worker kind: {spec.kind}")
+    if not callable(spec.fn):
+        raise ValueError("Worker fn must be callable")
+    for name in ("max_workers", "batch_size", "batch_timeout_ms", "aggregator_timeout_sec"):
+        value = getattr(spec, name)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError(f"{name} must be a positive integer")
+    if spec.circuit_breaker and (
+        spec.circuit_breaker.failures < 1
+        or spec.circuit_breaker.reset_sec < 1
+        or not math.isfinite(spec.circuit_breaker.reset_sec)
+    ):
+        raise ValueError("Invalid circuit breaker policy")
+    if spec.rate_limit and (
+        not math.isfinite(spec.rate_limit.rps)
+        or spec.rate_limit.rps <= 0
+        or spec.rate_limit.burst < 1
+    ):
+        raise ValueError("Invalid rate limit policy")
+    if spec.retry_to_dlq and (
+        spec.retry_to_dlq.max_attempts < 1 or not spec.retry_to_dlq.dlq_topic
+    ):
+        raise ValueError("Invalid retry-to-DLQ policy")
     if spec.max_workers < 1:
         raise ValueError("max_workers must be >= 1")
     if len(set(spec.topics_in)) != len(spec.topics_in):
         raise ValueError("Input topics must be unique")
-    if not spec.name or any(not t for t in spec.topics_in + spec.topics_out):
+    if len(set(spec.topics_out)) != len(spec.topics_out):
+        raise ValueError("Output topics must be unique")
+    if (
+        not isinstance(spec.name, str)
+        or not spec.name.strip()
+        or isinstance(spec.topics_in, str)
+        or isinstance(spec.topics_out, str)
+        or any(not isinstance(t, str) or not t.strip() for t in [*spec.topics_in, *spec.topics_out])
+    ):
         raise ValueError("Worker name and topics must be nonempty")
     if spec.aggregator_timeout_sec < 1:
         raise ValueError("aggregator_timeout_sec must be >= 1")
-    if spec.name in _WORKERS_BY_NAME:
-        raise RuntimeError(f"Duplicate worker name '{spec.name}'")
-
     if not spec.topics_in:
         raise ValueError(f"Worker '{spec.name}' must define topics_in")
     if not spec.topics_out:
         raise ValueError(f"Worker '{spec.name}' must define topics_out")
-
-    for t in spec.topics_in:
-        if t in _TOPIC_TO_WORKER:
-            raise RuntimeError(
-                f"Topic '{t}' already handled by '{_TOPIC_TO_WORKER[t]}'. "
-                f"Only one worker per topic is allowed in this framework."
-            )
 
     if spec.kind == "handler" and spec.bulk_mode:
         if spec.batch_size < 2:
@@ -128,6 +159,48 @@ def register_worker(spec: WorkerSpec) -> None:
         if len(spec.topics_in) < 2:
             raise ValueError(f"Aggregator '{spec.name}' must define 2+ topics_in")
 
+
+def validate_workers(workers) -> list[WorkerSpec]:
+    """Validate and snapshot a complete worker set, including name/topic collisions.
+
+    Both decorator registration and explicit runtime injection use this boundary.
+    It is deliberately independent of global state so applications can compose
+    isolated runtimes and test them without importing a registry singleton.
+    """
+    names, topics, result = set(), {}, []
+    for spec in workers:
+        validate_worker(spec)
+        if spec.name in names:
+            raise RuntimeError(f"Duplicate worker name '{spec.name}'")
+        names.add(spec.name)
+        for topic in spec.topics_in:
+            if topic in topics:
+                raise RuntimeError(f"Topic '{topic}' already handled by '{topics[topic]}'")
+            topics[topic] = spec.name
+        result.append(
+            replace(
+                spec,
+                topics_in=list(spec.topics_in),
+                topics_out=list(spec.topics_out),
+                metadatas=deepcopy(spec.metadatas),
+            )
+        )
+    return result
+
+
+def register_worker(spec: WorkerSpec) -> None:
+    validate_worker(spec)
+    if spec.name in _WORKERS_BY_NAME:
+        raise RuntimeError(f"Duplicate worker name '{spec.name}'")
+    for topic in spec.topics_in:
+        if topic in _TOPIC_TO_WORKER:
+            raise RuntimeError(f"Topic '{topic}' already handled by '{_TOPIC_TO_WORKER[topic]}'")
+    spec = replace(
+        spec,
+        topics_in=list(spec.topics_in),
+        topics_out=list(spec.topics_out),
+        metadatas=deepcopy(spec.metadatas),
+    )
     _WORKERS_BY_NAME[spec.name] = spec
     for t in spec.topics_in:
         _TOPIC_TO_WORKER[t] = spec.name
@@ -177,6 +250,8 @@ def kafka_handler(
     `aggregator=True` defaults the join key to `id`. Supplying `aggregate_by`
     also selects aggregation; dotted paths are supported.
     """
+    if isinstance(topics_in, str) or isinstance(topics_out, str):
+        raise ValueError("topics_in and topics_out must be sequences of topic names")
 
     def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
         # Read policies from anywhere in wrapper chain

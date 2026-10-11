@@ -13,6 +13,14 @@ class PartitionProgress:
 
 
 class CommitCoordinator:
+    """Commit only the completed prefix of records actually fetched.
+
+    Kafka offsets can have numeric gaps (compaction/transactions); contiguity
+    means fetch order rather than every integer offset. PartitionProgress object
+    identity fences old assignments. Snapshot progress survives failed RPCs and
+    is removed only after a confirmed commit for that same assignment.
+    """
+
     def __init__(self, consumer, metrics=None, timeout=10):
         self.consumer, self.metrics, self.timeout = consumer, metrics, timeout
         self.partitions: dict[Any, PartitionProgress] = {}
@@ -46,6 +54,7 @@ class CommitCoordinator:
         return last
 
     async def commit(self, partitions=None):
+        """Serialize broker commits without discarding progress on timeout/error."""
         async with self.lock:
             snapshots = {
                 tp: (p, self.candidate(p))

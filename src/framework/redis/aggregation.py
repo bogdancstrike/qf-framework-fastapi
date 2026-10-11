@@ -1,3 +1,11 @@
+"""Atomic Redis join ownership with token fencing and renewable retention.
+
+Incomplete parts expire after the configured join timeout. Once complete, parts
+outlive the active lease by that timeout, giving a replacement owner a recovery
+window. Each Lua transition is atomic; a pipeline of transitions is not a single
+cross-key transaction. Related keys use a common Redis Cluster hash tag.
+"""
+
 import asyncio
 import hashlib
 import json
@@ -23,6 +31,7 @@ redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
 redis.call('EXPIRE', KEYS[1], ARGV[3])
 if redis.call('HLEN', KEYS[1]) < tonumber(ARGV[4]) then return {'stored'} end
 redis.call('SET', KEYS[2], ARGV[5], 'EX', ARGV[6])
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3]) + tonumber(ARGV[6]))
 local parts = redis.call('HGETALL', KEYS[1])
 table.insert(parts, 1, 'ready')
 return parts
@@ -30,7 +39,7 @@ return parts
 RENEW = """
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
 redis.call('EXPIRE', KEYS[1], ARGV[2])
-redis.call('EXPIRE', KEYS[2], ARGV[3])
+redis.call('EXPIRE', KEYS[2], tonumber(ARGV[2]) + tonumber(ARGV[3]))
 return 1
 """
 FINISH = """
@@ -65,6 +74,8 @@ class ClaimRequest:
 
 
 class AggregationStore:
+    """Own a Redis client unless one is supplied; script results are fenced claims."""
+
     def __init__(self, settings, client=None):
         self.settings = settings
         self.client = client or Redis.from_url(
@@ -90,6 +101,7 @@ class AggregationStore:
         return [f"qf:agg:{{{digest}}}:{suffix}" for suffix in ("parts", "lease", "done")]
 
     def prepare_claim(self, spec, key, topic, payload, *, token=None):
+        """Build a replayable request; reuse its token after an uncertain response."""
         if topic not in spec.topics_in:
             raise ValueError("Unknown aggregation topic")
         token, keys = token or uuid.uuid4().hex, self.keys(spec, key)
@@ -123,6 +135,7 @@ class AggregationStore:
         return self.decode_claim(request, result)
 
     async def claim_many(self, requests):
+        """Batch independent claims in one network round trip, preserving order."""
         async with self.client.pipeline(transaction=False) as pipeline:
             for request in requests:
                 await self._claim_script(
@@ -176,6 +189,7 @@ class AggregationStore:
         await self.finish_many([claim], ttl)
 
     async def finish_many(self, claims, ttl):
+        """Write idempotent completion tombstones, rejecting any lost owner token."""
         if not claims:
             return
         async with self.client.pipeline(transaction=False) as pipeline:

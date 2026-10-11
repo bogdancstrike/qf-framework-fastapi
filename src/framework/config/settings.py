@@ -13,6 +13,7 @@ class FrameworkSettings(BaseSettings):
         env_file=".env",
         extra="ignore",
         populate_by_name=True,
+        allow_inf_nan=False,
     )
     enable_etl: bool = True
     enable_api: bool = True
@@ -165,19 +166,22 @@ def load_framework_settings(*, dotenv_path=None, overrides=None, config=None):
             old = "QSINT_" + field.upper()
             if hasattr(config, old):
                 defaults[field] = getattr(config, old)
-    env = {**dotenv_values(dotenv_path or ".env"), **os.environ}
+    # Resolve aliases within each layer, not across a merged dictionary. A
+    # process WORKER_NAME must override a dotenv QSINT_CONSUMER_NAME and vice versa.
+    layers = (dotenv_values(dotenv_path or ".env"), os.environ)
     for field, info in FrameworkSettings.model_fields.items():
         aliases = ["QSINT_" + field.upper()]
         if isinstance(info.validation_alias, AliasChoices):
             aliases.extend(info.validation_alias.choices)
         aliases.extend(old for old, new in LEGACY_KEYS.items() if new == field)
-        for alias in aliases:
-            if alias in env:
-                value = env[alias]
-                if field in {"worker_modules", "cors_origins", "extra"}:
-                    import json
+        for layer in layers:
+            for alias in aliases:
+                if alias in layer and layer[alias] is not None:
+                    value = layer[alias]
+                    if field in {"worker_modules", "cors_origins", "extra"}:
+                        import json
 
-                    value = json.loads(value)
-                defaults[field] = value
-                break
+                        value = json.loads(value)
+                    defaults[field] = value
+                    break
     return FrameworkSettings(_env_file=dotenv_path or ".env", **{**defaults, **(overrides or {})})
