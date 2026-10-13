@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.2.0 — 2026-10-13
+
+Reusable application components, taken from a QSINT service (service-data) so other services
+stop re-implementing them. All are opt-in imports: applications that do not use them behave
+exactly as in 2.1. Guides: [docs/Operations-HTTP.md](docs/Operations-HTTP.md),
+[docs/ReusableComponents.md](docs/ReusableComponents.md).
+
+### Added
+- `framework.operations` (extra `operations`, adds `jsonschema`): endpoint-map routes served with the Flask / flask-restx / Werkzeug wire contract. `@api_operation`, `OperationCall`, `OperationChain` (links `MediaTypeGuard`, `JsonDecoder`, `BodyKindPolicy`, `SchemaValidator`, `IdentityResolver`, `HandlerInvoker`), per-endpoint `operation_contract` (`model`, `body_kind`) and `operation_schemas` (Draft 4, strict types, nested models, `enum_ci`), `RouteCatalogue` / `load_map` / `describe_routes`, `ApiProfile` strategies (`ValidationBodyProfile`, `ErrorFieldProfile`) in a `ProfileRegistry`, `OperationError` / `ClientInputError` and an `ErrorMapper` applications extend with `register`, `OperationObserver`, `LegacyJSONResponse`, legacy exception handlers (HTML 404, JSON 405, OPTIONS 200), `BodySizeLimitMiddleware`, `SecurityHeadersMiddleware`, `EchoOriginCorsMiddleware`, `TrailingSlashMiddleware`, and `install_operations` to set all of it up.
+- Gateway identity in `framework.operations`: `Identity`, `GateHeaders` (default `X-User-Name` / `X-User-Roles`), `resolve_identity`, `@with_user` and `user_required(body, status)`, `requires_user`.
+- `framework.health`: `wait_for_dependencies` (start-up gate with per-check timeout, backoff and deadline, `DependenciesUnavailable`), `run_probes`, `readiness_status` (`ready` / `degraded` / `not_ready`), `install_readiness_routes` (`/health/ready`, `/health/dependencies`).
+- `framework.commons.events`: `EventLogger` (`log.info("event", key=value)`), `redact`, `scrub`, `ScrubbingJSONFormatter`, `get_event_logger`, `configure_event_logging`.
+- `framework.tracing.spans`: `traced_span`, `@traced`, `set_span_attributes`, `span_attributes`, `inject_http_headers`, `current_trace_id` (attributes redacted like log fields).
+- `framework.resilience.CircuitBreaker`: explicit allow/success/failure breaker for callers that degrade instead of raising.
+- `framework.redis.versioned_cache.VersionedJsonCache`: Redis read-through JSON cache keyed by name and data version, with call budget, breaker, observer and in-process memo.
+- `framework.testing.spans.capture_spans`: in-memory span capture for tests.
+
 ## 2.1.0 — 2026-10-13
 
 Opt-in options for batch-importer pipelines (QImporter parity). Workers that do not

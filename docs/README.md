@@ -17,6 +17,8 @@ Start with the path matching what you need to do.
 | Review ACK/Redis hardening and measured before/after costs | [Reliability hardening](Hardening.md) |
 | Extend collaborators and preserve concurrency/failure contracts | [Extension guide](Extending.md) |
 | Run batch-importer pipelines (per-message outcomes, replayable dead letters, own consumer groups) | [Importer parity (2.1)](ImporterParity.md) |
+| Keep a Flask service's HTTP contract (validation answers, error bodies, 404/405, encoding) behind endpoint maps | [Legacy HTTP contract (2.2)](Operations-HTTP.md) |
+| Start-up gate, detailed readiness, event logging, span helpers, circuit breaker, versioned cache | [Reusable components (2.2)](ReusableComponents.md) |
 | Review the concurrency audit and repeated five-stage trials | [Runtime audit](RuntimeAudit.md) |
 | Choose optional future framework features | [Twenty feature proposals](Roadmap.md) |
 | Follow trace IDs through Kafka, batches and Redis joins | [Distributed tracing](Tracing.md) |

@@ -28,6 +28,11 @@ shows HTTP ingress, fan-out, joins, retries and tracing together.
 | Application metrics and status | `WorkerObserver` subclass passed as `observer=` | No-op hooks `on_job`, `on_transient`, `on_recovered`, `on_lag`, `on_state`, `on_restart`; exceptions are logged and ignored |
 | Offset operations | `framework.streams.admin.KafkaAdmin` | Lag, offsets for a time, membership, commit without joining |
 | Extra consumers and clusters in tests | `KafkaRuntime(consumer_factory=..., producer_factory=...)` | Called per extra lane / per extra cluster; the runtime starts and stops what they return |
+| Legacy HTTP contract for endpoint-map routes | `install_operations(app, maps, chain=, profiles=, extra_middleware=)` | See [Operations-HTTP.md](Operations-HTTP.md); `@api_operation` handlers receive an `OperationCall` |
+| Client-input error dialect of an API family | `ApiProfile.client_input_error(path, reason)` in a `ProfileRegistry` or a map's `api_profile` | Returns `(body, status)` |
+| Answer an application exception | `ErrorMapper().register(exc_type, answer)` | `answer(exc, spec) -> (body, status)`; most specific class wins |
+| Per-request metrics or access logs of operations | `OperationObserver.on_response(spec, status, duration_s)` | Called once per answered request |
+| Start-up gate and detailed readiness | `framework.health` | See [ReusableComponents.md](ReusableComponents.md) |
 
 Configuration is snapshotted at startup: topic lists and nested worker metadata
 are copied. Changing the original `WorkerSpec` containers cannot change an active

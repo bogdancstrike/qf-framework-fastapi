@@ -405,6 +405,47 @@ await supervisor.stop()  # each runtime drains (shutdown_timeout_sec), commits, 
 - `KafkaSupervisor` runs one `KafkaRuntime` per consumer (same cluster, group and offset reset) and restarts a failed one alone after 5, 10, 20, 40, 60, 60 … s. `status()` gives each worker `running`, `backing_off` (with the error class), `topic_missing` (with `QSINT_VERIFY_TOPICS=true`; retried), `disabled` or `stopped`; `error` stays `None` because every failure is recoverable by a restart.
 - `KafkaAdmin(servers)`: `committed_offsets`, `end_offsets`, `lag`, `offsets_for_time`, `group_members` and `commit_offsets(group, offsets, metadata=)`, which commits with manual assignment (the group is never joined) and refuses a group with active members unless `force=True`.
 
+## Framework 2.2 reusable application components
+
+Version 2.2 adds building blocks that QSINT services had each written for themselves. All are opt-in imports; nothing changes for an application that does not use them. Details and examples: [Operations-HTTP.md](docs/Operations-HTTP.md) (the legacy HTTP contract) and [ReusableComponents.md](docs/ReusableComponents.md) (the rest).
+
+| Need | Use | Module |
+|---|---|---|
+| Keep a Flask / flask-restx service's wire contract byte for byte while moving to the framework | `install_operations(app, maps)`, `@api_operation` | `framework.operations` (extra `operations`) |
+| Caller identity from gateway headers; "this operation needs a user" | `Identity`, `@with_user`, `user_required(body, status)` | `framework.operations` |
+| Not live, not ready until Postgres/Kafka/... answer | `wait_for_dependencies(checks, required=, timeout_s=)` | `framework.health` |
+| `ready` / `degraded` / `not_ready` with per-check detail | `run_probes`, `readiness_status`, `install_readiness_routes` | `framework.health` |
+| `log.info("event_name", key=value)` with redaction of bodies, prompts and secrets | `get_event_logger`, `configure_event_logging`, `redact`, `scrub` | `framework.commons.events` |
+| Spans in one line, with the same redaction | `traced_span`, `@traced`, `inject_http_headers` | `framework.tracing.spans` |
+| Degrade (instead of raise) while a dependency is down | `CircuitBreaker` | `framework.resilience` |
+| Cache configuration-derived data until the configuration version changes | `VersionedJsonCache` | `framework.redis.versioned_cache` |
+| Assert spans in tests | `capture_spans()` | `framework.testing.spans` |
+
+```python
+from framework.app import FrameworkApp
+from framework.operations import (
+    ErrorFieldProfile, OperationCall, ProfileRegistry, api_operation, install_operations,
+    load_map, with_user,
+)
+
+
+@api_operation
+@with_user                                    # 400 {"error": "Missing X-User-Name header"}
+async def save_search(call: OperationCall) -> dict:
+    return {"owner": call.identity.user, "alias": call.payload["alias"]}
+
+
+app = FrameworkApp(settings).build_app()
+install_operations(
+    app,
+    [load_map("maps/searches.json")],         # routes + "operation_contract" per endpoint
+    profiles=ProfileRegistry({"qdata": ErrorFieldProfile()}),
+    max_body_bytes=16 << 20,
+    cors_origins=("https://ui.example",),
+)
+app.state.ctx = my_context                    # what call.ctx is
+```
+
 ## JSON endpoint mappings
 
 Existing namespace/model/endpoint declarations are compiled once into FastAPI routes and Pydantic schemas. Example `maps/endpoint.json`:
@@ -689,8 +730,12 @@ src/framework/
   etl/           Bounded scheduler, processing and commit coordinator
   redis/         Async helpers, aggregation and optional replay ledger
   streams/       Async Kafka convenience client
-  tracing/       W3C propagation and optional OTLP provider
-  commons/       JSON logging and retained domain utilities
+  tracing/       W3C propagation, optional OTLP provider and span helpers
+  commons/       JSON and event logging, retained domain utilities
+  operations/    Legacy (Flask / flask-restx) HTTP contract for endpoint-map routes
+  health/        Start-up dependency gate and detailed readiness
+  testing/       Test helpers (in-memory span capture)
+  resilience.py  CircuitBreaker
 examples/        Runnable HTTP, worker and configuration examples
 tests/           Unit, live integration, stress, crash and tracing checks
 benchmarks/      Matched original/new harnesses and tracked raw results
@@ -701,7 +746,7 @@ docs/            Specifications, architecture, operations and comparison
 
 - [Documentation index](docs/README.md), [getting started](docs/GettingStarted.md), [example catalog](examples/README.md)
 - [Worker contracts and cookbook](docs/Workers.md), [testing guide](docs/Testing.md), [troubleshooting](docs/Troubleshooting.md)
-- [Extending the framework](docs/Extending.md), [runtime audit and repeated pipeline evidence](docs/RuntimeAudit.md), [importer parity (2.1)](docs/ImporterParity.md), [changelog](CHANGELOG.md)
+- [Extending the framework](docs/Extending.md), [runtime audit and repeated pipeline evidence](docs/RuntimeAudit.md), [importer parity (2.1)](docs/ImporterParity.md), [legacy HTTP contract (2.2)](docs/Operations-HTTP.md), [reusable components (2.2)](docs/ReusableComponents.md), [changelog](CHANGELOG.md)
 - [Specification](docs/specs.md), [architecture](docs/architecture.md), [task status](docs/tasks.md)
 - [Migration and compatibility](docs/Migration.md), [configuration](docs/Configuration.md)
 - [Operations and failure recovery](docs/Operations.md), [distributed tracing](docs/Tracing.md)
