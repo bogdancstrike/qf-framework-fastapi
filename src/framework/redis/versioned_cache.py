@@ -30,7 +30,7 @@ import asyncio
 import json
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any, Generic, TypeVar, cast
+from typing import Any, TypeVar, cast
 
 from ..commons.events import EventLogger, get_event_logger
 from ..resilience import CircuitBreaker
@@ -53,7 +53,7 @@ def _ignore(operation: str, outcome: str, started: float) -> None:
     """Default `CallObserver`: records nothing."""
 
 
-class VersionedJsonCache(Generic[T]):
+class VersionedJsonCache:
     """Decorator over a loader (VersionedJsonCache): read-through JSON cache by name and version.
 
     Args:

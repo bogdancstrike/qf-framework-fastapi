@@ -1,6 +1,7 @@
 """Operation layer: the Flask / flask-restx / Werkzeug wire contract, through a framework app."""
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -251,6 +252,37 @@ async def test_raw_route_reads_empty_shapes_as_an_empty_object(client, raw):
     resp = await client.post("/qdata/admin", content=raw, headers=USER)
     assert resp.status_code == 200
     assert resp.json()["body"] == {}
+
+
+class NullIsBadRequest(ErrorFieldProfile):
+    """A family whose legacy service answered a JSON ``null`` with Werkzeug's 400."""
+
+    def non_object_body(self, body: Any) -> tuple[Any, int] | None:
+        return ({"message": "bad request"}, 400) if body is None else None
+
+
+@pytest.mark.parametrize(("raw", "expected"), [("null", {"message": "bad request"}), ("[]", None)])
+async def test_a_profile_can_answer_non_object_bodies(tmp_path, raw, expected):
+    path = tmp_path / "test.json"
+    path.write_text(json.dumps(TEST_MAP))
+    app = create_app(FrameworkSettings(enable_etl=False, enable_dynamic_endpoints=False))
+    install_operations(
+        app, [load_map(path)], profiles=ProfileRegistry({"qdata": NullIsBadRequest()})
+    )
+    app.state.ctx = SimpleNamespace()
+    async with client_for(app) as client:
+        resp = await client.post("/qdata/save_search", content=raw, headers=USER)
+    assert resp.status_code == 400
+    if expected is None:  # the profile declines: the flask-restx validation body
+        assert resp.json()["message"] == "Input payload validation failed"
+    else:
+        assert resp.json() == expected
+
+
+def test_the_package_ships_its_type_hints():
+    import framework
+
+    assert (Path(framework.__file__).parent / "py.typed").is_file()
 
 
 async def test_raw_route_rejects_other_non_objects(client):

@@ -125,13 +125,18 @@ class BodyKindPolicy(ChainLink):
     """Link 5: apply the route's body kind (``validated``/``object``/``raw``/``ignored``/``none``)."""
 
     async def handle(self, state: ChainState) -> Response | None:
-        """Read ignored bodies as ``{}``; 400 (validation body) for a non-object where one is needed."""
+        """Read ignored bodies as ``{}``; a non-object where one is needed is answered by the route's profile."""
         kind = state.spec.body_kind
         if kind in ("ignored", "none") or (kind == "raw" and state.body in ([], None)):
             state.body = {}
             return None
         if not isinstance(state.body, dict):
-            return respond(validation_body(OBJECT_ONLY.errors(state.body)), 400)
+            answer = state.spec.profile.non_object_body(state.body)
+            return (
+                respond(*answer)
+                if answer
+                else respond(validation_body(OBJECT_ONLY.errors(state.body)), 400)
+            )
         return None
 
 

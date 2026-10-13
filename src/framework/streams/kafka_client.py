@@ -1,6 +1,8 @@
 """Explicit async Kafka convenience client; no per-message connections."""
 
 import json
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.admin import AIOKafkaAdminClient, NewTopic
@@ -9,11 +11,11 @@ from .stream_interface import StreamClientInterface
 
 
 class KafkaClient(StreamClientInterface):
-    def __init__(self, bootstrap_servers="localhost:9092", **security):
+    def __init__(self, bootstrap_servers: str = "localhost:9092", **security: Any) -> None:
         self.bootstrap_servers, self.security = bootstrap_servers, security
-        self.producer = None
+        self.producer: AIOKafkaProducer | None = None
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "KafkaClient":
         if self.producer is not None:
             raise RuntimeError("KafkaClient is already entered")
         self.producer = AIOKafkaProducer(
@@ -29,14 +31,22 @@ class KafkaClient(StreamClientInterface):
             raise
         return self
 
-    async def __aexit__(self, *args):
+    async def __aexit__(self, *args: object) -> None:
         if self.producer:
             try:
                 await self.producer.stop()
             finally:
                 self.producer = None
 
-    async def put_message(self, topic_name, message, key=None, *, headers=None, timestamp_ms=None):
+    async def put_message(
+        self,
+        topic_name: str,
+        message: Any,
+        key: str | bytes | None = None,
+        *,
+        headers: Mapping[str, Any] | Iterable[tuple[str, bytes]] | None = None,
+        timestamp_ms: int | None = None,
+    ) -> Any:
         """Send one message and wait for its acknowledgement.
 
         ``message`` is JSON-encoded unless it is ``bytes`` (sent unchanged).

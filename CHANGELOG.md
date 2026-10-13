@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.2.1 — 2026-10-13
+
+Found while switching service-data to 2.2.0.
+
+### Added
+- `ApiProfile.non_object_body(body)`: a profile can answer a JSON body that is not an object (e.g. Werkzeug's 400 for `null`); the default keeps the flask-restx validation body.
+- `py.typed`: the package ships its type hints, so applications type-check against the framework (subclasses of framework classes are no longer `Any` to mypy).
+
+### Changed
+- `VersionedJsonCache` is no longer generic at class level: `get_or_build` is typed per call, since one cache serves names of different types.
+
 ## 2.2.0 — 2026-10-13
 
 Reusable application components, taken from a QSINT service (service-data) so other services

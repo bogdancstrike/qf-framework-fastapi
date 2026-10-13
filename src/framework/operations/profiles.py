@@ -1,8 +1,9 @@
 """API profiles: how each legacy API family reports a client-input error (Strategy).
 
 A handler raises `ClientInputError(path, reason)` for a request shape the permissive route
-model let through but the business rules reject. How that is answered depends on the API
-family the route belongs to, chosen by its URL prefix (the endpoint-map namespace):
+model let through but the business rules reject; a body that is not a JSON object where the
+route needs one is answered by `ApiProfile.non_object_body`. How either is answered depends on
+the API family the route belongs to, chosen by its URL prefix (the endpoint-map namespace):
 
 - `ValidationBodyProfile`: the flask-restx validation body ``{"errors": {path: reason}, ...}``;
 - `ErrorFieldProfile`: one message under one key, e.g. ``{"error": "Invalid request: <path>"}``.
@@ -26,6 +27,15 @@ class ApiProfile:
     def client_input_error(self, path: str, reason: str) -> tuple[Any, int]:
         """The ``(body, status)`` answering a client-input error at `path` (a dotted field path)."""
         raise NotImplementedError
+
+    def non_object_body(self, body: Any) -> tuple[Any, int] | None:
+        """The answer to a JSON body that is not an object where the route needs one.
+
+        `None` (the default) keeps the flask-restx answer: the validation body saying the
+        body must be an object. A family whose legacy service answered differently (e.g.
+        Werkzeug's 400 for a JSON ``null``) overrides it.
+        """
+        return None
 
 
 class ValidationBodyProfile(ApiProfile):

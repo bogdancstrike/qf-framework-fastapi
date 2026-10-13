@@ -1,15 +1,25 @@
 """Explicit provider ownership; no SDK/exporter required when disabled."""
 
 import os
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from opentelemetry import trace
+from opentelemetry.context import Context
 from opentelemetry.propagate import inject, extract
 
-_provider = None
+_provider: Any = None
 _tracer = trace.NoOpTracerProvider().get_tracer("framework")
 
 
-def init_tracing(service_name, otlp_endpoint=None, insecure=False, *, enabled=None, app=None):
+def init_tracing(
+    service_name: str,
+    otlp_endpoint: str | None = None,
+    insecure: bool = False,
+    *,
+    enabled: bool | None = None,
+    app: Any = None,
+) -> Any:
     global _provider, _tracer
     if enabled is None:
         enabled = _tracing_enabled()
@@ -36,25 +46,29 @@ def init_tracing(service_name, otlp_endpoint=None, insecure=False, *, enabled=No
     return _provider
 
 
-def get_tracer():
+def get_tracer() -> trace.Tracer:
     return _tracer
 
 
-def shutdown_tracing():
+def shutdown_tracing() -> None:
     # Provider is process-owned: flush here; process exit owns final shutdown.
     if _provider:
         _provider.force_flush(timeout_millis=5000)
 
 
-def inject_trace_headers(existing=None):
-    carrier = {}
+def inject_trace_headers(
+    existing: Mapping[str, Any] | Iterable[tuple[str, Any]] | None = None,
+) -> list[tuple[str, Any]]:
+    carrier: dict[str, str] = {}
     inject(carrier)
     items = list((existing or {}).items()) if isinstance(existing, dict) else list(existing or [])
     items = [(k, v) for k, v in items if k not in carrier]
     return items + [(k, v.encode()) for k, v in carrier.items()]
 
 
-def extract_context_from_headers(headers):
+def extract_context_from_headers(
+    headers: Mapping[str, Any] | Iterable[tuple[str, Any]] | None,
+) -> Context:
     items = headers.items() if isinstance(headers, dict) else headers or []
     carrier = {
         k: v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v)
@@ -64,7 +78,7 @@ def extract_context_from_headers(headers):
     return extract(carrier)
 
 
-def _tracing_enabled():
+def _tracing_enabled() -> bool:
     return os.getenv("QSINT_ENABLE_TRACING", os.getenv("ENABLE_TRACING", "false")).lower() in {
         "1",
         "true",

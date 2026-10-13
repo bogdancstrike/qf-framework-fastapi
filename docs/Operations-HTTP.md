@@ -131,7 +131,7 @@ app.state.ctx = context
 
 | Extension point | Contract |
 |---|---|
-| `ApiProfile` | `client_input_error(path, reason) -> (body, status)`; registered per namespace in `ProfileRegistry`, or named by a map (`"api_profile": "module:Class"`). Default: the flask-restx validation body. `ProfileRegistry(default=None)` makes an unknown namespace a start-up error |
+| `ApiProfile` | `client_input_error(path, reason) -> (body, status)`; `non_object_body(body) -> (body, status) | None` answers a non-object JSON body where the route needs an object (`None`: the flask-restx validation body; override it for a family whose legacy service answered e.g. Werkzeug's 400 for `null`); registered per namespace in `ProfileRegistry`, or named by a map (`"api_profile": "module:Class"`). Default: the flask-restx validation body. `ProfileRegistry(default=None)` makes an unknown namespace a start-up error |
 | `ErrorMapper.register(exc_type, answer)` | `answer(exc, spec) -> (body, status)`; checked before the built-in types, along the exception's MRO |
 | `OperationObserver.on_response(spec, status, duration_s)` | Called once per answered request; the default logs `operation_request` (DEBUG) / `operation_request_failed` (ERROR) |
 | `ChainLink.handle(state) -> Response | None` | Insert your own link in the tuple you pass to `OperationChain`; `state.extras` is free for it |
