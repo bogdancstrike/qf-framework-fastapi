@@ -36,7 +36,14 @@ class KafkaClient(StreamClientInterface):
             finally:
                 self.producer = None
 
-    async def put_message(self, topic_name, message, key=None):
+    async def put_message(self, topic_name, message, key=None, *, headers=None, timestamp_ms=None):
+        """Send one message and wait for its acknowledgement.
+
+        ``message`` is JSON-encoded unless it is ``bytes`` (sent unchanged).
+        ``headers`` (``(name, bytes)`` pairs or a dict) are kept, with the current
+        trace context added; ``timestamp_ms`` sets the record's CreateTime, so a
+        replayed record can keep its original timestamp.
+        """
         if self.producer is None:
             raise RuntimeError("Use KafkaClient with async with")
         value = (
@@ -45,8 +52,16 @@ class KafkaClient(StreamClientInterface):
             else message
         )
         key = key.encode() if isinstance(key, str) else key
+        if isinstance(headers, dict):
+            headers = [
+                (k, v if isinstance(v, bytes) else str(v).encode()) for k, v in headers.items()
+            ]
         return await self.producer.send_and_wait(
-            topic_name, value, key=key, headers=inject_trace_headers()
+            topic_name,
+            value,
+            key=key,
+            headers=inject_trace_headers(headers),
+            timestamp_ms=timestamp_ms,
         )
 
     async def consume_message(

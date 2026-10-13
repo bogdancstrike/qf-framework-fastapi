@@ -12,6 +12,7 @@ from .intern import RetryToDlqConfig, CircuitBreakerConfig, RateLimitConfig
 
 
 WorkerKind = Literal["handler", "aggregator"]
+OffsetReset = Literal["earliest", "latest"]
 
 
 def _get_by_path(obj: dict, path: str) -> Any:
@@ -54,6 +55,19 @@ class WorkerSpec:
     The function receives (message_or_batch, consumer_name, metadatas). Policy
     decorators replace this frozen record rather than wrapping runtime retries.
     Mutable topic lists and metadata are copied at the runtime boundary.
+
+    2.1 options (every default keeps the 2.0 behaviour):
+
+    - ``consumer_group`` / ``bootstrap_servers`` / ``auto_offset_reset``: this worker's
+      own consumer (group, cluster, start position). ``None`` uses the runtime's
+      ``consumer_name`` / ``kafka_bootstrap_servers``. Workers sharing the three values
+      share one consumer; outputs and dead letters go to the worker's own cluster.
+    - ``split_arrays``: a JSON-array value carries one logical message per object element.
+    - ``with_context``: the handler also receives ``context=`` (a ``RecordContext``, or a
+      list aligned with the batch for bulk handlers).
+    - ``inject_id``: ``False`` leaves messages without ``id`` untouched.
+    - ``key_by``: dotted path of the output key (``None``: the source record key).
+    - ``encoder``: bytes encoder of outputs (``None``: compact JSON).
     """
 
     kind: WorkerKind
@@ -75,6 +89,15 @@ class WorkerSpec:
     aggregator_timeout_sec: int = 600
 
     fn: Callable[..., Any] = lambda *a, **k: None
+
+    consumer_group: Optional[str] = None
+    bootstrap_servers: Optional[str] = None
+    auto_offset_reset: OffsetReset = "earliest"
+    split_arrays: bool = False
+    with_context: bool = False
+    inject_id: bool = True
+    key_by: Optional[str] = "id"
+    encoder: Optional[Callable[[Any], bytes]] = None
 
 
 _WORKERS_BY_NAME: Dict[str, WorkerSpec] = {}
@@ -142,8 +165,19 @@ def validate_worker(spec: WorkerSpec) -> None:
         raise ValueError("aggregator_timeout_sec must be >= 1")
     if not spec.topics_in:
         raise ValueError(f"Worker '{spec.name}' must define topics_in")
-    if not spec.topics_out:
-        raise ValueError(f"Worker '{spec.name}' must define topics_out")
+    if spec.auto_offset_reset not in ("earliest", "latest"):
+        raise ValueError(f"Worker '{spec.name}': auto_offset_reset must be earliest or latest")
+    for name in ("consumer_group", "bootstrap_servers"):
+        value = getattr(spec, name)
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise ValueError(f"Worker '{spec.name}': {name} must be a nonempty string or None")
+    if spec.key_by is not None and (
+        not isinstance(spec.key_by, str) or not all(spec.key_by.split("."))
+    ):
+        raise ValueError(f"Worker '{spec.name}': key_by must be a dotted path or None")
+    if spec.encoder is not None and not callable(spec.encoder):
+        raise ValueError(f"Worker '{spec.name}': encoder must be callable")
+    # An empty topics_out is a sink: the worker publishes nothing (returning outputs fails).
 
     if spec.kind == "handler" and spec.bulk_mode:
         if spec.batch_size < 2:
@@ -154,6 +188,10 @@ def validate_worker(spec: WorkerSpec) -> None:
     if spec.kind == "aggregator":
         if spec.bulk_mode:
             raise ValueError("Aggregator workers cannot use bulk_mode")
+        if spec.split_arrays:
+            raise ValueError("Aggregator workers cannot use split_arrays")
+        if not spec.topics_out:
+            raise ValueError(f"Aggregator '{spec.name}' must define topics_out")
         if not isinstance(spec.aggregate_by, str) or not all(spec.aggregate_by.split(".")):
             raise ValueError(f"Aggregator '{spec.name}' must define aggregate_by (e.g. 'id')")
         if len(spec.topics_in) < 2:
@@ -244,11 +282,21 @@ def kafka_handler(
     aggregator: bool = False,
     aggregate_by: Optional[str] = None,
     aggregator_timeout_sec: int = 600,
+    consumer_group: Optional[str] = None,
+    bootstrap_servers: Optional[str] = None,
+    auto_offset_reset: OffsetReset = "earliest",
+    split_arrays: bool = False,
+    with_context: bool = False,
+    inject_id: bool = True,
+    key_by: Optional[str] = "id",
+    encoder: Optional[Callable[[Any], bytes]] = None,
 ):
     """Register a normal worker or a correlation join.
 
     `aggregator=True` defaults the join key to `id`. Supplying `aggregate_by`
-    also selects aggregation; dotted paths are supported.
+    also selects aggregation; dotted paths are supported. The 2.1 keyword
+    options (`consumer_group` … `encoder`) are described on :class:`WorkerSpec`;
+    their defaults keep the 2.0 behaviour. `topics_out=[]` declares a sink.
     """
     if isinstance(topics_in, str) or isinstance(topics_out, str):
         raise ValueError("topics_in and topics_out must be sequences of topic names")
@@ -278,6 +326,14 @@ def kafka_handler(
                 else ("id" if aggregator else None),
                 aggregator_timeout_sec=int(aggregator_timeout_sec),
                 fn=fn,
+                consumer_group=consumer_group,
+                bootstrap_servers=bootstrap_servers,
+                auto_offset_reset=auto_offset_reset,
+                split_arrays=bool(split_arrays),
+                with_context=bool(with_context),
+                inject_id=bool(inject_id),
+                key_by=key_by,
+                encoder=encoder,
             )
         )
 

@@ -55,6 +55,10 @@ class FrameworkSettings(BaseSettings):
     output_ack_timeout_sec: float = Field(default=30, gt=0)
     producer_linger_ms: int = Field(default=5, ge=0)
     producer_batch_size: int = Field(default=65536, ge=1)
+    producer_max_request_size: int = Field(default=1048576, ge=1024)
+    producer_request_timeout_ms: int = Field(default=40000, ge=1000)
+    disabled_workers: list[str] = Field(default_factory=list)
+    verify_topics: bool = False
     kafka_security_protocol: str = "PLAINTEXT"
     kafka_sasl_mechanism: str = "PLAIN"
     kafka_sasl_username: str | None = None
@@ -178,7 +182,7 @@ def load_framework_settings(*, dotenv_path=None, overrides=None, config=None):
             for alias in aliases:
                 if alias in layer and layer[alias] is not None:
                     value = layer[alias]
-                    if field in {"worker_modules", "cors_origins", "extra"}:
+                    if field in {"worker_modules", "cors_origins", "extra", "disabled_workers"}:
                         import json
 
                         value = json.loads(value)

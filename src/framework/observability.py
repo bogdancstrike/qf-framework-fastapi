@@ -39,6 +39,14 @@ class Metrics:
             "qf_aggregate_parts_total", "Redis join claim outcomes", ["worker", "status"]
         )
         self.failures = counter("qf_failures_total", "Failures", ["component"])
+        self.decode_dropped = counter(
+            "qf_decode_dropped_total", "Array elements dropped while decoding", ["worker", "reason"]
+        )
+        self.dlq_truncated = counter(
+            "qf_dlq_truncated_total",
+            "Dead letters refused by the broker and replaced by a reference",
+            ["worker"],
+        )
         self.job_duration = Histogram(
             "qf_job_duration_seconds",
             "Worker job duration including retries",

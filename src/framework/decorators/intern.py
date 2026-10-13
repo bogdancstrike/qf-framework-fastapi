@@ -3,14 +3,36 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 
 @dataclass(frozen=True)
 class RetryToDlqConfig:
+    """Handler retry and dead-letter policy of one worker.
+
+    Attributes:
+        max_attempts: Handler attempts, including the first.
+        dlq_topic: Topic receiving the dead letters.
+        retry_count_field: Legacy metadata (accepted, not persisted).
+        dlq_format: ``DeadLetterFormat`` building each dead letter; ``None`` keeps the
+            2.0 diagnostic envelope.
+        transient: Exception classes meaning "a dependency is down, nothing is wrong
+            with the message": the job is retried with ``transient_backoff`` until it
+            succeeds (or its partition is revoked); it is never dead-lettered and its
+            offsets are not committed meanwhile.
+        transient_backoff: ``Backoff`` of transient retries (``None``: exponential
+            1, 2, 4 … 60 s with ±20 % jitter).
+        backoff: ``Backoff`` between ordinary handler attempts (``None``: the runtime's
+            full-jitter settings, as in 2.0).
+    """
+
     max_attempts: int = 2
     dlq_topic: str = ""
     retry_count_field: str = "retry_count"
+    dlq_format: Any = None
+    transient: Tuple[type, ...] = ()
+    transient_backoff: Any = None
+    backoff: Any = None
 
 
 @dataclass(frozen=True)
@@ -99,17 +121,40 @@ def retry_to_dlq(
     max_attempts: int = 2,
     dlq_topic: str,
     retry_count_field: str = "retry_count",
+    dlq_format: Any = None,
+    transient: Tuple[type, ...] = (),
+    transient_backoff: Any = None,
+    backoff: Any = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Attach a retry policy that escalates to a DLQ after N attempts."""
+    """Attach a retry policy that escalates to a DLQ after N attempts.
+
+    The 2.1 options (``dlq_format``, ``transient``, ``transient_backoff``,
+    ``backoff``) are described on :class:`RetryToDlqConfig`.
+    """
     if max_attempts < 1:
         raise ValueError("max_attempts must be >= 1")
     if not dlq_topic:
         raise ValueError("dlq_topic must be non-empty")
+    transient = tuple(transient)
+    if not all(isinstance(t, type) and issubclass(t, BaseException) for t in transient):
+        raise ValueError("transient must contain exception classes")
+    for name, value in (
+        ("dlq_format", dlq_format),
+        ("transient_backoff", transient_backoff),
+        ("backoff", backoff),
+    ):
+        method = "build" if name == "dlq_format" else "delay"
+        if value is not None and not callable(getattr(value, method, None)):
+            raise ValueError(f"{name} must define {method}()")
 
     cfg = RetryToDlqConfig(
         max_attempts=int(max_attempts),
         dlq_topic=str(dlq_topic),
         retry_count_field=str(retry_count_field),
+        dlq_format=dlq_format,
+        transient=transient,
+        transient_backoff=transient_backoff,
+        backoff=backoff,
     )
 
     def deco(fn: Callable[..., Any]) -> Callable[..., Any]:

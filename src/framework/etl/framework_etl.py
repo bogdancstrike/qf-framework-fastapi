@@ -10,8 +10,10 @@ import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from typing import Any
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, ConsumerRebalanceListener
+from aiokafka.admin import AIOKafkaAdminClient
 
 from ..commons.logger import logger
 from ..config import FrameworkSettings
@@ -22,6 +24,27 @@ from .policies import Admission
 from .processing import Processor, StaleAssignment
 
 
+class MissingTopicsError(RuntimeError):
+    """``verify_topics`` found topics that do not exist (they are never auto-created)."""
+
+    def __init__(self, missing):
+        self.missing = sorted(missing)
+        super().__init__("Missing Kafka topics: " + ", ".join(self.missing))
+
+
+@dataclass
+class Lane:
+    """One consumer and its commit coordinator, shared by workers with equal
+    bootstrap servers, consumer group and offset reset policy."""
+
+    bootstrap: str
+    group: str
+    offset_reset: str
+    consumer: Any = None
+    coordinator: Any = None
+    workers: list = field(default_factory=list)
+
+
 @dataclass
 class Partition:
     progress: object
@@ -29,18 +52,20 @@ class Partition:
     tasks: set = field(default_factory=set)
     revoked: bool = False
     draining: bool = False
+    lane: Lane | None = None
 
 
 class RebalanceListener(ConsumerRebalanceListener):
-    def __init__(self, runtime):
-        self.runtime = runtime
+    def __init__(self, runtime, lane=None):
+        self.runtime, self.lane = runtime, lane
 
     async def on_partitions_revoked(self, revoked):
         await self.runtime.revoke(revoked)
 
     async def on_partitions_assigned(self, assigned):
+        lane = self.lane or self.runtime.lanes[0]
         for tp in assigned:
-            self.runtime.partitions[tp] = Partition(self.runtime.coordinator.assign(tp))
+            self.runtime.partitions[tp] = Partition(lane.coordinator.assign(tp), lane=lane)
 
 
 class KafkaRuntime:
@@ -50,6 +75,14 @@ class KafkaRuntime:
     This runtime starts/stops supplied transports too; an AggregationStore with
     an injected Redis client leaves that underlying client application-owned.
     Runtime instances are single-use and all methods run on their owning loop.
+
+    Workers naming their own ``consumer_group``, ``bootstrap_servers`` or
+    ``auto_offset_reset`` get their own consumer ("lane"), with its own commits
+    and rebalances; workers using the defaults share the first lane, exactly as in
+    2.0 (``runtime.consumer``/``runtime.coordinator`` are that lane's). Outputs and
+    dead letters use a producer of the worker's own cluster. ``consumer_factory``
+    and ``producer_factory`` (``(lane_or_bootstrap) -> client``) inject transports
+    for extra lanes and clusters in tests.
     """
 
     def __init__(
@@ -61,10 +94,15 @@ class KafkaRuntime:
         producer=None,
         aggregation=None,
         workers=None,
+        consumer_factory=None,
+        producer_factory=None,
     ):
         self.settings, self.metrics = settings, metrics or Metrics()
         self.consumer, self.producer, self.aggregation = consumer, producer, aggregation
+        self.consumer_factory, self.producer_factory = consumer_factory, producer_factory
         self.workers = workers
+        self.lanes: list[Lane] = []
+        self.producers: dict[str, Any] = {}
         self.partitions = {}
         self.active = {}
         self.executors = {}
@@ -123,12 +161,90 @@ class KafkaRuntime:
             await self.stop()
             raise
 
+    def lane_key(self, spec):
+        return (
+            spec.bootstrap_servers or self.settings.kafka_bootstrap_servers,
+            spec.consumer_group or self.settings.consumer_name,
+            spec.auto_offset_reset,
+        )
+
+    def new_consumer(self, lane):
+        if self.consumer_factory is not None:
+            return self.consumer_factory(lane)
+        return AIOKafkaConsumer(
+            bootstrap_servers=lane.bootstrap,
+            group_id=lane.group,
+            enable_auto_commit=False,
+            auto_offset_reset=lane.offset_reset,
+            isolation_level="read_committed",
+            max_poll_interval_ms=self.settings.max_poll_interval_ms,
+            fetch_max_wait_ms=self.settings.fetch_max_wait_ms,
+            rebalance_timeout_ms=int(self.settings.rebalance_timeout_sec * 1000),
+            **self.security(),
+        )
+
+    def new_producer(self, bootstrap):
+        if self.producer_factory is not None:
+            return self.producer_factory(bootstrap)
+        return AIOKafkaProducer(
+            bootstrap_servers=bootstrap,
+            enable_idempotence=True,
+            acks="all",
+            linger_ms=self.settings.producer_linger_ms,
+            max_batch_size=self.settings.producer_batch_size,
+            max_request_size=self.settings.producer_max_request_size,
+            request_timeout_ms=self.settings.producer_request_timeout_ms,
+            **self.security(),
+        )
+
+    def select_workers(self, workers):
+        disabled = set(self.settings.disabled_workers)
+        unknown = disabled - {w.name for w in workers}
+        if unknown:
+            raise ValueError(
+                "disabled_workers names unknown workers: " + ", ".join(sorted(unknown))
+            )
+        if disabled:
+            logger.info(
+                "Kafka workers disabled by configuration",
+                extra={"event": {"workers": sorted(disabled)}},
+            )
+        return [w for w in workers if w.name not in disabled]
+
+    async def verify_topics(self):
+        """Refuse to start when an input, output or dead-letter topic is missing."""
+        wanted: dict[str, set] = {}
+        for w in self.workers:
+            bootstrap = w.bootstrap_servers or self.settings.kafka_bootstrap_servers
+            topics = wanted.setdefault(bootstrap, set())
+            topics.update(w.topics_in, w.topics_out)
+            topics.add(w.retry_to_dlq.dlq_topic if w.retry_to_dlq else self.settings.error_topic)
+        missing = set()
+        for bootstrap, topics in wanted.items():
+            admin = AIOKafkaAdminClient(bootstrap_servers=bootstrap, **self.security())
+            await admin.start()
+            try:
+                # Broker metadata can lag a fresh topic creation: re-read before refusing.
+                for attempt in range(3):
+                    absent = topics - set(await admin.list_topics())
+                    if not absent:
+                        break
+                    await asyncio.sleep(0.5 * (attempt + 1))
+            finally:
+                await admin.close()
+            missing.update(absent)
+        if missing:
+            raise MissingTopicsError(missing)
+
     async def _start(self):
         for module in self.settings.worker_modules:
             importlib.import_module(module)
         self.workers = validate_workers(all_workers() if self.workers is None else self.workers)
+        self.workers = self.select_workers(self.workers)
         if not self.workers:
             raise RuntimeError("No Kafka workers registered")
+        if self.settings.verify_topics:
+            await self.verify_topics()
         self.by_topic = {topic: w for w in self.workers for topic in w.topics_in}
         self.active = {w.name: set() for w in self.workers}
         self.admission = {w.name: Admission(w) for w in self.workers}
@@ -137,32 +253,38 @@ class KafkaRuntime:
             for w in self.workers
             if not inspect.iscoroutinefunction(w.fn)
         }
-        if self.consumer is None:
-            self.consumer = AIOKafkaConsumer(
-                bootstrap_servers=self.settings.kafka_bootstrap_servers,
-                group_id=self.settings.consumer_name,
-                enable_auto_commit=False,
-                auto_offset_reset="earliest",
-                isolation_level="read_committed",
-                max_poll_interval_ms=self.settings.max_poll_interval_ms,
-                fetch_max_wait_ms=self.settings.fetch_max_wait_ms,
-                rebalance_timeout_ms=int(self.settings.rebalance_timeout_sec * 1000),
-                **self.security(),
-            )
-        self.coordinator = CommitCoordinator(
-            self.consumer, self.metrics, self.settings.commit_timeout_sec
+        lanes: dict[tuple, Lane] = {}
+        for w in self.workers:
+            key = self.lane_key(w)
+            lanes.setdefault(key, Lane(*key)).workers.append(w)
+        default_key = (
+            self.settings.kafka_bootstrap_servers,
+            self.settings.consumer_name,
+            "earliest",
         )
-        self.consumer.subscribe(list(self.by_topic), listener=RebalanceListener(self))
-        if self.producer is None:
-            self.producer = AIOKafkaProducer(
-                bootstrap_servers=self.settings.kafka_bootstrap_servers,
-                enable_idempotence=True,
-                acks="all",
-                linger_ms=self.settings.producer_linger_ms,
-                max_batch_size=self.settings.producer_batch_size,
-                **self.security(),
+        # The default lane comes first: it is the 2.0 consumer (or the injected one).
+        self.lanes = sorted(
+            lanes.values(),
+            key=lambda lane: (lane.bootstrap, lane.group, lane.offset_reset) != default_key,
+        )
+        for index, lane in enumerate(self.lanes):
+            injected = index == 0 and self.consumer is not None
+            lane.consumer = self.consumer if injected else self.new_consumer(lane)
+            lane.coordinator = CommitCoordinator(
+                lane.consumer, self.metrics, self.settings.commit_timeout_sec
             )
+            topics = [t for w in lane.workers for t in w.topics_in]
+            lane.consumer.subscribe(topics, listener=RebalanceListener(self, lane))
+        self.consumer = self.lanes[0].consumer
+        self.coordinator = self.lanes[0].coordinator
+        if self.producer is None:
+            self.producer = self.new_producer(self.settings.kafka_bootstrap_servers)
         await self.connect(self.producer)
+        for bootstrap in sorted(
+            {lane.bootstrap for lane in self.lanes} - {self.settings.kafka_bootstrap_servers}
+        ):
+            self.producers[bootstrap] = self.new_producer(bootstrap)
+            await self.connect(self.producers[bootstrap])
         if self.settings.idempotency_enabled or any(w.kind == "aggregator" for w in self.workers):
             if self.aggregation is None:
                 from ..redis.aggregation import AggregationStore
@@ -170,9 +292,15 @@ class KafkaRuntime:
                 self.aggregation = AggregationStore(self.settings)
             await self.aggregation.start()
         self.processor = Processor(
-            self.settings, self.producer, self.metrics, self.executors, self.aggregation
+            self.settings,
+            self.producer,
+            self.metrics,
+            self.executors,
+            self.aggregation,
+            producers=self.producers,
         )
-        await self.connect(self.consumer)
+        for lane in self.lanes:
+            await self.connect(lane.consumer)
         self.ready = True
         self.metrics.ready.set(1)
         self.task = asyncio.create_task(self.run(), name="qf-kafka-runtime")
@@ -243,7 +371,8 @@ class KafkaRuntime:
                 self.admission[spec.name].failure(generation)
             else:
                 self.admission[spec.name].success(generation)
-            self.coordinator.complete(tp, [r.offset for r in records], partition.progress)
+            coordinator = partition.lane.coordinator if partition.lane else self.coordinator
+            coordinator.complete(tp, [r.offset for r in records], partition.progress)
         except (asyncio.CancelledError, StaleAssignment):
             self.admission[spec.name].abandon(generation)
             raise
@@ -258,13 +387,20 @@ class KafkaRuntime:
         if partition is None or partition.revoked or partition.draining:
             return
         progress = partition.progress
+        consumer, coordinator = self.lane_of(partition)
         for record in records:
             if len(progress.offsets) >= self.settings.pending_max_per_tp:
-                self.consumer.pause(tp)
-                self.consumer.seek(tp, record.offset)
+                consumer.pause(tp)
+                consumer.seek(tp, record.offset)
                 break
-            self.coordinator.register(tp, record.offset)
+            coordinator.register(tp, record.offset)
             partition.pending.append((record, time.monotonic()))
+
+    def lane_of(self, partition):
+        """``(consumer, coordinator)`` owning ``partition``."""
+        if partition.lane is not None:
+            return partition.lane.consumer, partition.lane.coordinator
+        return self.consumer, self.coordinator
 
     def tick(self, *, flush=False):
         # Rotate order to keep hot partitions from monopolizing shared worker slots.
@@ -280,12 +416,13 @@ class KafkaRuntime:
             self.metrics.circuit.labels(spec.name).set(
                 bool(admission.open_until or admission.probe)
             )
-            if not partition.revoked and tp in self.consumer.assignment():
+            consumer, _ = self.lane_of(partition)
+            if not partition.revoked and tp in consumer.assignment():
                 if count >= self.settings.pending_max_per_tp:
-                    self.consumer.pause(tp)
+                    consumer.pause(tp)
                 else:
-                    self.consumer.resume(tp)
-                highwater = self.consumer.highwater(tp)
+                    consumer.resume(tp)
+                highwater = consumer.highwater(tp)
                 if highwater is not None and partition.progress.committed is not None:
                     self.metrics.lag.labels(tp.topic, str(tp.partition)).set(
                         max(0, highwater - partition.progress.committed)
@@ -295,27 +432,32 @@ class KafkaRuntime:
             self.partitions[tp] = self.partitions.pop(tp)
 
     async def commit(self, partitions=None):
-        ok = await self.coordinator.commit(partitions)
+        ok = True
+        for lane in self.lanes or [None]:
+            coordinator = lane.coordinator if lane else self.coordinator
+            ok = await coordinator.commit(partitions) and ok
         self.commit_failures = 0 if ok else self.commit_failures + 1
         if self.commit_failures >= self.settings.transport_attempts:
             raise RuntimeError("Commit retry budget exhausted; source offsets remain replayable")
 
     async def run(self):
         last_commit = time.monotonic()
-        poll_task = None
+        polls: dict[int, asyncio.Task] = {}
+        consumers = [lane.consumer for lane in self.lanes] or [self.consumer]
         try:
             while not self.closing:
                 if self.error is not None:
                     raise self.error
                 self.wakeup.clear()
                 self.tick()
-                if poll_task is None:
-                    poll_task = asyncio.create_task(
-                        self.consumer.getmany(
-                            timeout_ms=self.settings.poll_timeout_ms,
-                            max_records=self.settings.poll_max_records,
+                for index, consumer in enumerate(consumers):
+                    if index not in polls:
+                        polls[index] = asyncio.create_task(
+                            consumer.getmany(
+                                timeout_ms=self.settings.poll_timeout_ms,
+                                max_records=self.settings.poll_max_records,
+                            )
                         )
-                    )
                 wake_task = asyncio.create_task(self.wakeup.wait())
                 started = time.monotonic()
                 timeout = (
@@ -325,16 +467,18 @@ class KafkaRuntime:
                 )
                 try:
                     done, _ = await asyncio.wait(
-                        {poll_task, wake_task}, timeout=timeout, return_when=asyncio.FIRST_COMPLETED
+                        {*polls.values(), wake_task},
+                        timeout=timeout,
+                        return_when=asyncio.FIRST_COMPLETED,
                     )
                 finally:
                     wake_task.cancel()
                     await asyncio.gather(wake_task, return_exceptions=True)
-                if poll_task in done:
-                    records = poll_task.result()
-                    poll_task = None
-                    for tp, messages in records.items():
-                        self.enqueue(tp, messages)
+                for index, poll_task in list(polls.items()):
+                    if poll_task in done:
+                        del polls[index]
+                        for tp, messages in poll_task.result().items():
+                            self.enqueue(tp, messages)
                 now = time.monotonic()
                 self.metrics.loop_lag.set(max(0, now - started - timeout))
                 if now - last_commit >= self.settings.commit_tick_sec:
@@ -347,9 +491,9 @@ class KafkaRuntime:
             self.error = exc
             logger.exception("Kafka runtime failed", extra={"event": {"component": "runtime"}})
         finally:
-            if poll_task:
+            for poll_task in polls.values():
                 poll_task.cancel()
-                await asyncio.gather(poll_task, return_exceptions=True)
+            await asyncio.gather(*polls.values(), return_exceptions=True)
             self.ready = False
             self.metrics.ready.set(0)
 
@@ -379,9 +523,12 @@ class KafkaRuntime:
         if unfinished:
             await asyncio.gather(*unfinished, return_exceptions=True)
         if self.coordinator:
-            await self.coordinator.commit(set(targets))
-            for tp in targets:
-                self.coordinator.partitions.pop(tp, None)
+            for tp, p in targets.items():
+                _, coordinator = self.lane_of(p)
+                await coordinator.commit({tp})
+            for tp, p in targets.items():
+                _, coordinator = self.lane_of(p)
+                coordinator.partitions.pop(tp, None)
                 self.partitions.pop(tp, None)
                 spec = self.by_topic[tp.topic]
                 self.metrics.pending.labels(spec.name, tp.topic, str(tp.partition)).set(0)
@@ -416,11 +563,16 @@ class KafkaRuntime:
             task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
-        if self.coordinator:
+        coordinators = [lane.coordinator for lane in self.lanes] or [self.coordinator]
+        for coordinator in coordinators:
+            if coordinator is None:
+                continue
             for _ in range(self.settings.transport_attempts):
-                if await self.coordinator.commit():
+                if await coordinator.commit():
                     break
-        for client in (self.consumer, self.producer, self.aggregation):
+        extra = [lane.consumer for lane in self.lanes if lane.consumer is not self.consumer]
+        clients = [self.consumer, *extra, self.producer, *self.producers.values(), self.aggregation]
+        for client in clients:
             if client is None:
                 continue
             try:
