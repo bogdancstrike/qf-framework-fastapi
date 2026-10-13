@@ -23,6 +23,10 @@ shows HTTP ingress, fan-out, joins, retries and tracing together.
 | Dead-letter record layout | `@retry_to_dlq(dlq_format=...)` implementing `DeadLetterFormat.build(letter)` | Return value, key and headers; trace headers are added by the runtime; refused records become a sha256 reference |
 | Retry schedule | `@retry_to_dlq(backoff=..., transient_backoff=...)` implementing `Backoff.delay(attempt)` | Seconds to wait; `transient` exception classes retry without a budget |
 | Output byte format | `@kafka_handler(encoder=...)` | `Callable[[value], bytes]`; `compact_json` (default) or `python_json` |
+| Workers built from application objects | `@kafka_handler` on methods + `collect_workers(owner, resolver, override=)` | Deferred values `(resolver) -> value`; returns validated specs bound to `owner` |
+| Isolate and restart worker groups | `KafkaSupervisor(settings, workers, observer=, runtime_factory=)` | One runtime per consumer lane; per-worker `status()`; usable as a `FrameworkApp` runtime |
+| Application metrics and status | `WorkerObserver` subclass passed as `observer=` | No-op hooks `on_job`, `on_transient`, `on_recovered`, `on_lag`, `on_state`, `on_restart`; exceptions are logged and ignored |
+| Offset operations | `framework.streams.admin.KafkaAdmin` | Lag, offsets for a time, membership, commit without joining |
 | Extra consumers and clusters in tests | `KafkaRuntime(consumer_factory=..., producer_factory=...)` | Called per extra lane / per extra cluster; the runtime starts and stops what they return |
 
 Configuration is snapshotted at startup: topic lists and nested worker metadata

@@ -33,6 +33,14 @@ Rule ids (`FLOW-03`, `GAP-ENG-10` …) refer to the QImporter business specifica
 | A dead-letter replay must keep the original record timestamp | `put_message` could not set one | `KafkaClient.put_message(..., headers=..., timestamp_ms=...)` | — |
 | Producer limits | Size the request limit explicitly | `QSINT_PRODUCER_MAX_REQUEST_SIZE`, `QSINT_PRODUCER_REQUEST_TIMEOUT_MS` | aiokafka defaults |
 
+| Workers are flows configured in Postgres (CFG-01); the replacement declares them in code, built from objects the composition root owns | Decorators on methods, values known only at start-up (environment prefixes, groups) | `@kafka_handler` on methods and deferred values `(resolver) -> value`; `collect_workers(owner, resolver, override=)` | module functions only |
+| The STT relay forwards raw chunks | No JSON decoding or dead-lettering of its input | `raw=True` | decode |
+| A dead flow was never restarted, or every flow was restarted (GAP-ENG-01/02); an unreachable cluster stalled everything | Restart one flow alone, report its state | `KafkaSupervisor`: one runtime per consumer lane, restarts after 5, 10, 20, 40, 60 s, per-worker `status()` | one runtime |
+| Application-level flow metrics (`sd_flow_*`) | Hooks instead of re-implementing the loop | `WorkerObserver` (`on_job` with outcome labels, `on_transient`, `on_recovered`, `on_lag`, `on_state`, `on_restart`) | none |
+| Poll and publish spans | Operators expect them in Jaeger | `trace_kafka_operations=true` | off (2.0 span shape) |
+| Cut-over and replay need offsets of legacy groups | Offsets per group, lag, offsets for a time, commit without joining | `KafkaAdmin` | — |
+| One topic is read by several services/flows with different groups | 2.0 refused a topic owned twice per process | A topic may be owned once **per consumer group**; partitions are tracked per lane | one owner per process |
+
 ### Already in 2.0 (no change needed)
 
 | QImporter behaviour or gap | 2.0 mechanism |
@@ -67,3 +75,25 @@ the single shared consumer behave exactly as in 2.0, and the 2.0 test suite pass
 unchanged. Two things are new for every worker: a dead letter the broker refuses
 as too large is replaced by a reference instead of failing the runtime, and
 `topics_out=[]` is accepted.
+
+## Mapping to the service-data importer topology (F1–F14)
+
+`service-data/docs/reference/importer-topology.md` §5 lists what the importer
+module needs. Each item and the 2.1 API that provides it:
+
+| # | Need | 2.1 API |
+|---|---|---|
+| F1 | Method workers without import-time registration | `@kafka_handler` on methods; `framework.decorators.kafka_workers.collect_workers(owner, resolver, override=)` |
+| F2 | Deferred values | callables `(resolver) -> value` for `topics_in`, `topics_out`, `consumer_group`, `bootstrap_servers`, `enabled`, `max_workers`, `batch_size`, `batch_timeout_ms`, `auto_offset_reset`; `override=` for per-environment overrides |
+| F3 | Per-worker consumer, group, cluster, offset reset | `consumer_group=`, `bootstrap_servers=`, `auto_offset_reset=`; one consumer per distinct triple; a topic may be read by workers of different groups |
+| F4 | Decoding modes | default JSON objects; `split_arrays=True` (`[]` counted as `skipped`); `raw=True`; undecodable values dead-lettered raw at stage `decode`; `inject_id=False` |
+| F5 | Record context | `with_context=True` → `context=` `RecordContext` (list for bulk) |
+| F6 | Per-record outcomes | `framework.etl.outcomes.Outcome` (`ok(*docs, label=)`, `skip`, `dead_letter(reason, stage=, values=, headers=)`, `retry`); `outcome_count_mismatch` |
+| F7 | Pluggable DLQ format | `@retry_to_dlq(dlq_format=HeaderDeadLetter(worker_header="flow"))` or any `DeadLetterFormat`; `traceparent` added by the runtime; `message_type` via `Outcome.dead_letter(headers=...)` |
+| F8 | Transient errors | `@retry_to_dlq(transient=(...), transient_backoff=ExponentialBackoff(cap_s=...))`. The in-flight job holds its offset (nothing committed past it, nothing dead-lettered) instead of pausing every partition; `WorkerObserver.on_transient`/`on_recovered` report the wait |
+| F9 | Commit only after acknowledgement | 2.0 ACK-gated commits; refused dead letters become sha256 references; a dead-letter transport failure fails the runtime (uncommitted) and `KafkaSupervisor` restarts it |
+| F10 | Slow batches and rebalances | polling never waits for handlers (no eviction); revocation waits `rebalance_timeout_sec / 2` for in-flight jobs (set `rebalance_timeout_sec=120` for 60 s) |
+| F11 | Missing topics | `verify_topics=true` → `MissingTopicsError`; under `KafkaSupervisor` the worker reports `topic_missing` (detail: topics) and is retried; topics are never created |
+| F12 | Supervision and status | `KafkaSupervisor` (restart schedule, per-worker `status()`); `shutdown_timeout_sec=25` bounds the drain on stop |
+| F13 | Observer hook and spans | `WorkerObserver`; `trace_kafka_operations=true` for `kafka.poll`/`kafka.publish`; `kafka.process <topic>` with per-record links (2.0) |
+| F14 | Offsets and replay helpers | `framework.streams.admin.KafkaAdmin`; `KafkaClient.put_message(headers=, timestamp_ms=)` |

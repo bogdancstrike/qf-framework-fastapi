@@ -283,7 +283,14 @@ Version 2.1 adds opt-in options for ingestion pipelines that replace a Python ba
 | Output key from a document path | `key_by="system._id"` (`None`: source key) | `"id"` |
 | `json.dumps` byte format of outputs | `encoder=python_json` | compact JSON |
 | A worker that publishes nothing | `topics_out=[]` | at least one topic |
-| Switch workers off, refuse missing topics | `QSINT_DISABLED_WORKERS`, `QSINT_VERIFY_TOPICS` | all on, no check |
+| Switch workers off, refuse missing topics | `enabled=`, `QSINT_DISABLED_WORKERS`, `QSINT_VERIFY_TOPICS` | all on, no check |
+| Workers as methods of an object built at start-up | `@kafka_handler` on methods + `collect_workers(obj, resolver)` | module functions |
+| Topics/groups/sizes decided at start-up | callables `(resolver) -> value` in `@kafka_handler` | literals |
+| Undecoded record bytes (relays) | `raw=True` | JSON decoding |
+| One flow failing must not stop the others | `KafkaSupervisor` (one runtime per consumer, restarted alone) | one runtime |
+| Application metrics and status | `WorkerObserver` (`observer=`) | none |
+| `kafka.poll` / `kafka.publish` spans | `QSINT_TRACE_KAFKA_OPERATIONS=true` | process spans only |
+| Lag reports, offset migration, replay "since" | `framework.streams.admin.KafkaAdmin` | — |
 
 ### Per-message outcomes with record context
 
@@ -350,6 +357,53 @@ async def relay(message, consumer_name, metadatas):
 ```
 
 Workers sharing `(bootstrap_servers, consumer_group, auto_offset_reset)` share one consumer; each distinct triple gets its own consumer, commits and rebalances, so one flow's rebalance never pauses another. An input topic still has one owning worker per process. To replay a dead letter with its original timestamp, use `KafkaClient.put_message(topic, raw_bytes, key, headers={...}, timestamp_ms=...)`.
+
+### Workers declared on methods, collected and supervised
+
+```python
+from framework.decorators import kafka_handler, retry_to_dlq
+from framework.decorators.kafka_workers import collect_workers
+from framework.etl.observer import WorkerObserver
+from framework.etl.outcomes import Outcome
+from framework.etl.supervisor import KafkaSupervisor
+
+
+class Importers:
+    """Built by the composition root with its stores; topics and groups live here, in code."""
+
+    def __init__(self, store):
+        self.store = store
+
+    @retry_to_dlq(max_attempts=3, dlq_topic="dead_letter")
+    @kafka_handler(
+        name="scraper-x",
+        topics_in=lambda env: [f"topic_input_scraper_twitter{env.suffix}"],
+        topics_out=["output-data-importer"],
+        consumer_group=lambda env: f"sd-{env.name}-scraper-x",
+        enabled=lambda env: env.scrapers_enabled,
+        bulk_mode=True,
+        batch_size=200,
+    )
+    async def scraper_x(self, messages, consumer_name, metadatas):
+        return [Outcome.ok(await self.store.save(m)) for m in messages]
+
+
+class Metrics(WorkerObserver):
+    def on_job(self, report):
+        ...  # report.worker, report.outcomes {"stored": 3, "skipped": 1}, report.duration_s
+
+
+workers = collect_workers(Importers(store), resolver=env)  # validated WorkerSpecs
+supervisor = KafkaSupervisor(settings, workers, observer=Metrics())
+# FrameworkApp(settings, runtime_factory=lambda s, metrics=None: supervisor), or:
+await supervisor.start()
+supervisor.status()  # {"scraper-x": {"state": "running", "restarts": 0, ...}, ...}
+await supervisor.stop()  # each runtime drains (shutdown_timeout_sec), commits, leaves its group
+```
+
+- A decorated **method** (first parameter `self`/`cls`), or a function with a deferred value, is only declared; `collect_workers(owner, resolver, override=)` binds it to `owner` and resolves every callable value. Module-level functions still register at import, as in 2.0. `@retry_to_dlq`, `@rate_limit` and `@circuit_breaker` work above or below the declaration.
+- `KafkaSupervisor` runs one `KafkaRuntime` per consumer (same cluster, group and offset reset) and restarts a failed one alone after 5, 10, 20, 40, 60, 60 … s. `status()` gives each worker `running`, `backing_off` (with the error class), `topic_missing` (with `QSINT_VERIFY_TOPICS=true`; retried), `disabled` or `stopped`; `error` stays `None` because every failure is recoverable by a restart.
+- `KafkaAdmin(servers)`: `committed_offsets`, `end_offsets`, `lag`, `offsets_for_time`, `group_members` and `commit_offsets(group, offsets, metadata=)`, which commits with manual assignment (the group is never joined) and refuses a group with active members unless `force=True`.
 
 ## JSON endpoint mappings
 

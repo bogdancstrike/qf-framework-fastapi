@@ -39,6 +39,7 @@ Generated from `FrameworkSettings` fields. Use `QSINT_` + uppercase field name u
 | `producer_max_request_size` | `1048576` |  |
 | `producer_request_timeout_ms` | `40000` |  |
 | `disabled_workers` | `[]` | JSON list of worker names to skip at start-up (unknown names refuse start-up) |
+| `trace_kafka_operations` | `False` | Also emit `kafka.poll` (per non-empty fetch) and `kafka.publish` spans |
 | `verify_topics` | `False` | Refuse start-up (`MissingTopicsError`) when an input, output or dead-letter topic is missing |
 | `kafka_security_protocol` | `PLAINTEXT` |  |
 | `kafka_sasl_mechanism` | `PLAIN` |  |

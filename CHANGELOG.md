@@ -15,6 +15,13 @@ use them behave exactly as in 2.0. Analysis and rationale: [docs/ImporterParity.
 - Per-worker `inject_id`, `key_by` and `encoder` (`compact_json`, `python_json`); `topics_out=[]` declares a sink.
 - Settings `disabled_workers`, `verify_topics` (`MissingTopicsError`), `producer_max_request_size`, `producer_request_timeout_ms`.
 - `KafkaClient.put_message(..., headers=, timestamp_ms=)`.
+- Workers declared on methods (or with deferred values `(resolver) -> value`) are collected per instance with `collect_workers(owner, resolver, override=)`; module-level functions still register at import.
+- Worker options `raw=True` (undecoded bytes) and `enabled=` (declared but not started).
+- A topic may be read by several workers whose consumer groups differ.
+- `KafkaSupervisor`: one runtime per consumer lane, restarted alone with backoff; per-worker `status()`.
+- `WorkerObserver` hooks (`on_job` with outcome labels, `on_transient`, `on_recovered`, `on_lag`, `on_state`, `on_restart`).
+- `trace_kafka_operations` setting: `kafka.poll` and `kafka.publish` spans.
+- `framework.streams.admin.KafkaAdmin`: committed/end offsets, lag, offsets for a time, group membership, commit offsets without joining.
 - Metrics `qf_decode_dropped_total{worker,reason}`, `qf_dlq_truncated_total{worker}`; `qf_retries_total{kind="transient"}`; `Outcome(label=...)` values in `qf_messages_total{outcome}`.
 
 ### Changed

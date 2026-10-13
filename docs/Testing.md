@@ -12,7 +12,7 @@ This checks scale-up, active SIGKILL/replacement, committed partial joins after 
 
 ## 2.1 importer options
 
-`tests/test_importer_parity.py` (45 unit tests) covers array splitting, record context, per-message outcomes, dead-letter formats, transient retries, backoff, validation and per-worker consumers/clusters with fake transports. `tests/test_importer_parity_live.py` (7 tests, `QF_INTEGRATION=1`) runs them against a real broker: split arrays with header dead letters and commits, independent consumer groups, `auto_offset_reset="latest"`, record timestamps and headers from `KafkaClient.put_message`, oversized outputs dead-lettered as references, transient retries holding the commit, and `verify_topics`.
+`tests/test_importer_workers.py` (17 unit tests) covers method workers and `collect_workers`, deferred values, raw mode, one topic in two groups, observer reports, opt-in Kafka spans and `KafkaSupervisor` (restart schedule, isolation, `topic_missing`, status). `tests/test_importer_parity.py` (45 unit tests) covers array splitting, record context, per-message outcomes, dead-letter formats, transient retries, backoff, validation and per-worker consumers/clusters with fake transports. `tests/test_importer_parity_live.py` (11 tests, `QF_INTEGRATION=1`) runs them against a real broker, including `KafkaAdmin` offset migration without joining, offsets for a time, one topic read by two groups and `KafkaSupervisor` isolating an unreachable cluster: split arrays with header dead letters and commits, independent consumer groups, `auto_offset_reset="latest"`, record timestamps and headers from `KafkaClient.put_message`, oversized outputs dead-lettered as references, transient retries holding the commit, and `verify_topics`.
 
 ## Fast local checks
 
