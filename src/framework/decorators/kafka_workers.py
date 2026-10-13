@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import uuid
 import math
 from copy import deepcopy
@@ -68,6 +69,8 @@ class WorkerSpec:
     - ``inject_id``: ``False`` leaves messages without ``id`` untouched.
     - ``key_by``: dotted path of the output key (``None``: the source record key).
     - ``encoder``: bytes encoder of outputs (``None``: compact JSON).
+    - ``raw``: the handler receives the record value bytes, undecoded.
+    - ``enabled``: ``False`` keeps the worker declared but never started.
     """
 
     kind: WorkerKind
@@ -98,6 +101,8 @@ class WorkerSpec:
     inject_id: bool = True
     key_by: Optional[str] = "id"
     encoder: Optional[Callable[[Any], bytes]] = None
+    raw: bool = False
+    enabled: bool = True
 
 
 _WORKERS_BY_NAME: Dict[str, WorkerSpec] = {}
@@ -177,6 +182,8 @@ def validate_worker(spec: WorkerSpec) -> None:
         raise ValueError(f"Worker '{spec.name}': key_by must be a dotted path or None")
     if spec.encoder is not None and not callable(spec.encoder):
         raise ValueError(f"Worker '{spec.name}': encoder must be callable")
+    if spec.raw and spec.split_arrays:
+        raise ValueError(f"Worker '{spec.name}': raw and split_arrays are exclusive")
     # An empty topics_out is a sink: the worker publishes nothing (returning outputs fails).
 
     if spec.kind == "handler" and spec.bulk_mode:
@@ -188,8 +195,8 @@ def validate_worker(spec: WorkerSpec) -> None:
     if spec.kind == "aggregator":
         if spec.bulk_mode:
             raise ValueError("Aggregator workers cannot use bulk_mode")
-        if spec.split_arrays:
-            raise ValueError("Aggregator workers cannot use split_arrays")
+        if spec.split_arrays or spec.raw:
+            raise ValueError("Aggregator workers cannot use split_arrays or raw")
         if not spec.topics_out:
             raise ValueError(f"Aggregator '{spec.name}' must define topics_out")
         if not isinstance(spec.aggregate_by, str) or not all(spec.aggregate_by.split(".")):
@@ -211,10 +218,12 @@ def validate_workers(workers) -> list[WorkerSpec]:
         if spec.name in names:
             raise RuntimeError(f"Duplicate worker name '{spec.name}'")
         names.add(spec.name)
+        # A topic has one owner per consumer group (and cluster); other groups get their copy.
+        scope = (spec.bootstrap_servers, spec.consumer_group)
         for topic in spec.topics_in:
-            if topic in topics:
-                raise RuntimeError(f"Topic '{topic}' already handled by '{topics[topic]}'")
-            topics[topic] = spec.name
+            if (scope, topic) in topics:
+                raise RuntimeError(f"Topic '{topic}' already handled by '{topics[scope, topic]}'")
+            topics[scope, topic] = spec.name
         result.append(
             replace(
                 spec,
@@ -269,73 +278,135 @@ def compute_aggregate_key(spec: WorkerSpec, message: dict) -> str:
     raise ValueError(f"Missing or invalid aggregation key: {spec.aggregate_by}")
 
 
+#: ``@kafka_handler`` arguments that may be a callable ``(resolver) -> value``.
+DEFERRABLE = (
+    "topics_in",
+    "topics_out",
+    "consumer_group",
+    "bootstrap_servers",
+    "enabled",
+    "max_workers",
+    "batch_size",
+    "batch_timeout_ms",
+    "auto_offset_reset",
+)
+DECLARATION_ATTR = "_qsint_worker_declaration"
+
+
+def _is_method(fn: Callable[..., Any]) -> bool:
+    """A function whose first parameter is ``self`` or ``cls`` (declared in a class body)."""
+    try:
+        first = next(iter(inspect.signature(fn).parameters), None)
+    except (TypeError, ValueError):
+        return False
+    return first in ("self", "cls")
+
+
+def _build_spec(declaration: Dict[str, Any], fn: Callable[..., Any]) -> WorkerSpec:
+    """A ``WorkerSpec`` from resolved declaration values and the (bound) function."""
+    d = declaration
+    return WorkerSpec(
+        kind="aggregator" if d["aggregator"] or d["aggregate_by"] is not None else "handler",
+        name=d["name"],
+        topics_in=list(d["topics_in"]),
+        topics_out=list(d["topics_out"]),
+        metadatas=dict(d["metadatas"] or {}),
+        max_workers=int(d["max_workers"]),
+        retry_to_dlq=_get_attr_anywhere(fn, "_qsint_retry_to_dlq"),
+        circuit_breaker=_get_attr_anywhere(fn, "_qsint_circuit_breaker"),
+        rate_limit=_get_attr_anywhere(fn, "_qsint_rate_limit"),
+        bulk_mode=bool(d["bulk_mode"]),
+        batch_size=int(d["batch_size"]),
+        batch_timeout_ms=int(d["batch_timeout_ms"]),
+        aggregate_by=d["aggregate_by"]
+        if d["aggregate_by"] is not None
+        else ("id" if d["aggregator"] else None),
+        aggregator_timeout_sec=int(d["aggregator_timeout_sec"]),
+        fn=fn,
+        consumer_group=d["consumer_group"],
+        bootstrap_servers=d["bootstrap_servers"],
+        auto_offset_reset=d["auto_offset_reset"],
+        split_arrays=bool(d["split_arrays"]),
+        with_context=bool(d["with_context"]),
+        inject_id=bool(d["inject_id"]),
+        key_by=d["key_by"],
+        encoder=d["encoder"],
+        raw=bool(d["raw"]),
+        enabled=bool(d["enabled"]),
+    )
+
+
 def kafka_handler(
     *,
     name: str,
-    topics_in: List[str],
-    topics_out: List[str],
+    topics_in: Any,
+    topics_out: Any,
     metadatas: Optional[Dict[str, Any]] = None,
-    max_workers: int = 4,
+    max_workers: Any = 4,
     bulk_mode: bool = False,
-    batch_size: int = 50,
-    batch_timeout_ms: int = 200,
+    batch_size: Any = 50,
+    batch_timeout_ms: Any = 200,
     aggregator: bool = False,
     aggregate_by: Optional[str] = None,
     aggregator_timeout_sec: int = 600,
-    consumer_group: Optional[str] = None,
-    bootstrap_servers: Optional[str] = None,
-    auto_offset_reset: OffsetReset = "earliest",
+    consumer_group: Any = None,
+    bootstrap_servers: Any = None,
+    auto_offset_reset: Any = "earliest",
     split_arrays: bool = False,
     with_context: bool = False,
     inject_id: bool = True,
     key_by: Optional[str] = "id",
     encoder: Optional[Callable[[Any], bytes]] = None,
+    raw: bool = False,
+    enabled: Any = True,
 ):
-    """Register a normal worker or a correlation join.
+    """Declare a worker: a normal handler or a correlation join.
 
     `aggregator=True` defaults the join key to `id`. Supplying `aggregate_by`
     also selects aggregation; dotted paths are supported. The 2.1 keyword
-    options (`consumer_group` … `encoder`) are described on :class:`WorkerSpec`;
+    options (`consumer_group` … `enabled`) are described on :class:`WorkerSpec`;
     their defaults keep the 2.0 behaviour. `topics_out=[]` declares a sink.
+
+    A module-level function is registered at import (2.0 behaviour). A method
+    (first parameter ``self``/``cls``), or a function with a deferred value, is
+    only *declared*: :func:`collect_workers` builds its ``WorkerSpec`` bound to an
+    instance (or module), resolving every deferred value ``(resolver) -> value``
+    (allowed for: ``topics_in``, ``topics_out``, ``consumer_group``,
+    ``bootstrap_servers``, ``enabled``, ``max_workers``, ``batch_size``,
+    ``batch_timeout_ms``, ``auto_offset_reset``).
     """
     if isinstance(topics_in, str) or isinstance(topics_out, str):
         raise ValueError("topics_in and topics_out must be sequences of topic names")
+    declaration = {
+        "name": name,
+        "topics_in": topics_in,
+        "topics_out": topics_out,
+        "metadatas": metadatas,
+        "max_workers": max_workers,
+        "bulk_mode": bulk_mode,
+        "batch_size": batch_size,
+        "batch_timeout_ms": batch_timeout_ms,
+        "aggregator": aggregator,
+        "aggregate_by": aggregate_by,
+        "aggregator_timeout_sec": aggregator_timeout_sec,
+        "consumer_group": consumer_group,
+        "bootstrap_servers": bootstrap_servers,
+        "auto_offset_reset": auto_offset_reset,
+        "split_arrays": split_arrays,
+        "with_context": with_context,
+        "inject_id": inject_id,
+        "key_by": key_by,
+        "encoder": encoder,
+        "raw": raw,
+        "enabled": enabled,
+    }
+    deferred = any(callable(declaration[key]) for key in DEFERRABLE)
 
     def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
-        # Read policies from anywhere in wrapper chain
-        retry_cfg = _get_attr_anywhere(fn, "_qsint_retry_to_dlq")
-        cb_cfg = _get_attr_anywhere(fn, "_qsint_circuit_breaker")
-        rl_cfg = _get_attr_anywhere(fn, "_qsint_rate_limit")
-
-        register_worker(
-            WorkerSpec(
-                kind="aggregator" if aggregator or aggregate_by is not None else "handler",
-                name=name,
-                topics_in=list(topics_in),
-                topics_out=list(topics_out),
-                metadatas=dict(metadatas or {}),
-                max_workers=int(max_workers),
-                retry_to_dlq=retry_cfg,
-                circuit_breaker=cb_cfg,
-                rate_limit=rl_cfg,
-                bulk_mode=bool(bulk_mode),
-                batch_size=int(batch_size),
-                batch_timeout_ms=int(batch_timeout_ms),
-                aggregate_by=aggregate_by
-                if aggregate_by is not None
-                else ("id" if aggregator else None),
-                aggregator_timeout_sec=int(aggregator_timeout_sec),
-                fn=fn,
-                consumer_group=consumer_group,
-                bootstrap_servers=bootstrap_servers,
-                auto_offset_reset=auto_offset_reset,
-                split_arrays=bool(split_arrays),
-                with_context=bool(with_context),
-                inject_id=bool(inject_id),
-                key_by=key_by,
-                encoder=encoder,
-            )
-        )
+        if deferred or _is_method(fn):
+            setattr(fn, DECLARATION_ATTR, declaration)
+            return fn
+        register_worker(_build_spec(declaration, fn))
 
         # Tag fn so policy decorators applied later can update registry
         try:
@@ -346,6 +417,70 @@ def kafka_handler(
         return fn
 
     return deco
+
+
+def _declared_function(raw: Any) -> Optional[Callable[..., Any]]:
+    """The function carrying a worker declaration behind ``raw`` (unwrapping descriptors)."""
+    if isinstance(raw, (staticmethod, classmethod)):
+        raw = raw.__func__
+    if not callable(raw):
+        return None
+    for candidate in _iter_wrapped(raw):
+        if hasattr(candidate, DECLARATION_ATTR):
+            return candidate
+    return None
+
+
+def collect_workers(
+    owner: Any,
+    resolver: Any = None,
+    *,
+    override: Optional[Callable[[WorkerSpec], WorkerSpec]] = None,
+) -> List[WorkerSpec]:
+    """``WorkerSpec``s of every ``@kafka_handler`` declared on ``owner``.
+
+    Args:
+        owner: An instance (its class's decorated methods are bound to it) or a module.
+        resolver: Passed to every deferred value ``(resolver) -> value``.
+        override: Optional final hook applied to each spec (e.g. per-environment
+            overrides) before validation.
+
+    Returns:
+        Validated specs in declaration-name order, disabled ones included
+        (``enabled=False``); runtimes skip those and report them as disabled.
+
+    Raises:
+        ValueError, RuntimeError: an invalid spec, a duplicate name, or a topic owned
+            twice in the same consumer group.
+    """
+    specs = []
+    for attribute in sorted(dir(owner)):
+        if attribute.startswith("__"):
+            continue
+        try:
+            raw = inspect.getattr_static(owner, attribute)
+        except AttributeError:
+            continue
+        declared = _declared_function(raw)
+        if declared is None:
+            continue
+        values = dict(getattr(declared, DECLARATION_ATTR))
+        for key in DEFERRABLE:
+            if callable(values[key]):
+                values[key] = values[key](resolver)
+        bound = getattr(owner, attribute)
+        policies_from = raw.__func__ if isinstance(raw, (staticmethod, classmethod)) else raw
+        spec = _build_spec(values, bound)
+        spec = replace(
+            spec,
+            retry_to_dlq=_get_attr_anywhere(policies_from, "_qsint_retry_to_dlq"),
+            circuit_breaker=_get_attr_anywhere(policies_from, "_qsint_circuit_breaker"),
+            rate_limit=_get_attr_anywhere(policies_from, "_qsint_rate_limit"),
+        )
+        if override is not None:
+            spec = override(spec)
+        specs.append(spec)
+    return validate_workers(specs)
 
 
 def kafka_aggregator(

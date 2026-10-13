@@ -59,6 +59,7 @@ class FrameworkSettings(BaseSettings):
     producer_request_timeout_ms: int = Field(default=40000, ge=1000)
     disabled_workers: list[str] = Field(default_factory=list)
     verify_topics: bool = False
+    trace_kafka_operations: bool = False
     kafka_security_protocol: str = "PLAINTEXT"
     kafka_sasl_mechanism: str = "PLAIN"
     kafka_sasl_username: str | None = None

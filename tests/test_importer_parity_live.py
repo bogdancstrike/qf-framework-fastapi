@@ -326,3 +326,130 @@ async def test_verify_topics_refuses_missing_topics_without_creating_them(spec, 
         assert missing not in await admin.list_topics()
     finally:
         await admin.close()
+
+
+# ------------------------------------------------- admin, groups, supervisor
+async def test_admin_reads_lag_and_migrates_offsets_without_joining(spec, topics, producer):
+    from framework.streams.admin import GroupActiveError, KafkaAdmin
+
+    for n in range(3):
+        await producer.send_and_wait(topics["in"], json.dumps({"n": n}).encode(), partition=0)
+    await producer.send_and_wait(topics["in"], b'{"n": 9}', partition=1)
+    legacy, target = f"{topics['in']}-legacy", f"{topics['in']}-flow"
+    p0, p1 = TopicPartition(topics["in"], 0), TopicPartition(topics["in"], 1)
+    async with KafkaAdmin(BOOTSTRAP) as admin:
+        await admin.commit_offsets(legacy, {p0: 2, p1: 1}, metadata="legacy")
+        assert await admin.committed_offsets(legacy, [topics["in"]]) == {p0: 2, p1: 1}
+        assert await admin.end_offsets([topics["in"]]) == {p0: 3, p1: 1}
+        assert await admin.lag(legacy, [topics["in"]]) == {p0: 1, p1: 0}
+        assert await admin.committed_offsets(target, [topics["in"]]) == {p0: None, p1: None}
+        assert await admin.group_members(legacy) == 0
+        moved = await admin.committed_offsets(legacy, [topics["in"]])
+        await admin.commit_offsets(target, moved, metadata=f"migrated-from:{legacy}")
+
+    seen = []
+
+    async def handler(message, *_):
+        seen.append(message["n"])
+
+    worker = replace(
+        spec, topics_in=[topics["in"]], topics_out=[], fn=handler, consumer_group=target
+    )
+    runtime = KafkaRuntime(settings_for(topics), workers=[worker])
+    await runtime.start()
+    try:
+
+        async def caught_up():
+            return 2 in seen
+
+        await until(caught_up)
+        async with KafkaAdmin(BOOTSTRAP) as admin:
+            assert await admin.group_members(target) >= 1
+            with pytest.raises(GroupActiveError):
+                await admin.commit_offsets(target, {p0: 0})
+    finally:
+        await runtime.stop()
+    assert seen == [2]  # the migrated position, not the history
+
+
+async def test_admin_offsets_for_time(topics):
+    from framework.streams.admin import KafkaAdmin
+
+    async with KafkaClient(BOOTSTRAP) as client:
+        for n, ts in enumerate((1700000000000, 1700000001000, 1700000002000)):
+            await client.put_message(topics["in"], {"n": n}, timestamp_ms=ts)
+    async with KafkaAdmin(BOOTSTRAP) as admin:
+        offsets = await admin.offsets_for_time([topics["in"]], 1700000001000)
+        later = await admin.offsets_for_time([topics["in"]], 1800000000000)
+    assert sum(offsets.values()) == 1 and later == await _ends(topics["in"])
+
+
+async def _ends(topic):
+    from framework.streams.admin import KafkaAdmin
+
+    async with KafkaAdmin(BOOTSTRAP) as admin:
+        return await admin.end_offsets([topic])
+
+
+async def test_two_groups_read_the_same_topic_in_one_runtime(spec, topics, producer):
+    seen = []
+
+    async def handler(message, group, metadatas):
+        seen.append(group)
+
+    audit = f"{topics['in']}-audit"
+    a = replace(spec, name="a", topics_in=[topics["in"]], topics_out=[], fn=handler)
+    b = replace(
+        spec, name="b", topics_in=[topics["in"]], topics_out=[], fn=handler, consumer_group=audit
+    )
+    await producer.send_and_wait(topics["in"], b'{"n": 1}', partition=0)
+    runtime = KafkaRuntime(settings_for(topics), workers=[a, b])
+    await runtime.start()
+    try:
+        await until(lambda: _committed_at_least(topics["in"], topics["in"], {0: 1}))
+        await until(lambda: _committed_at_least(audit, topics["in"], {0: 1}))
+    finally:
+        await runtime.stop()
+    assert sorted(seen) == sorted([topics["in"], audit])
+
+
+async def test_supervisor_isolates_an_unreachable_cluster(spec, topics, producer):
+    from framework.etl.supervisor import KafkaSupervisor
+
+    seen = []
+
+    async def handler(message, *_):
+        seen.append(message["n"])
+
+    healthy = replace(spec, name="healthy", topics_in=[topics["in"]], topics_out=[], fn=handler)
+    broken = replace(
+        spec,
+        name="broken",
+        topics_in=[topics["side"]],
+        topics_out=[],
+        fn=handler,
+        bootstrap_servers="localhost:1",
+    )
+    await producer.send_and_wait(topics["in"], b'{"n": 1}', partition=0)
+    settings = settings_for(topics, connect_attempts=1, startup_timeout_sec=5)
+    supervisor = KafkaSupervisor(
+        settings, [healthy, broken], restart_base_sec=0.5, restart_cap_sec=1
+    )
+    await supervisor.start()
+    try:
+
+        async def isolated():
+            status = supervisor.status()
+            return (
+                status["healthy"]["state"] == "running"
+                and status["broken"]["state"] == "backing_off"
+                and status["broken"]["restarts"] >= 2
+                and seen == [1]
+            )
+
+        await until(isolated, timeout=60)
+        await until(lambda: _committed_at_least(topics["in"], topics["in"], {0: 1}))
+        assert not supervisor.ready
+    finally:
+        await supervisor.stop()
+    assert supervisor.status()["healthy"]["state"] == "stopped"

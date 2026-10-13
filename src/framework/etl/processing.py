@@ -24,6 +24,7 @@ from ..streams.encoding import compact_json, python_json
 from ..tracing import extract_context_from_headers, get_tracer, inject_trace_headers
 from .backoff import ExponentialBackoff
 from .dead_letter import RAW, DeadLetter, DiagnosticEnvelope
+from .observer import JOB_OUTCOMES, notify
 from .outcomes import Outcome, is_outcome_result
 from .records import context_for
 
@@ -68,9 +69,18 @@ class Processor:
     """
 
     def __init__(
-        self, settings, producer, metrics, executors=None, aggregation=None, *, producers=None
+        self,
+        settings,
+        producer,
+        metrics,
+        executors=None,
+        aggregation=None,
+        *,
+        producers=None,
+        observer=None,
     ):
         self.settings, self.producer, self.metrics = settings, producer, metrics
+        self.observer = observer
         self.executors = executors or {}
         self.aggregation = aggregation
         self.publisher = AckPublisher(
@@ -154,6 +164,13 @@ class Processor:
             return await result
         return result
 
+    def count(self, spec, label, amount=1):
+        """Count ``amount`` messages with outcome ``label`` (metrics and the job report)."""
+        self.metrics.processed.labels(spec.name, label).inc(amount)
+        outcomes = JOB_OUTCOMES.get()
+        if outcomes is not None:
+            outcomes[label] += amount
+
     @staticmethod
     def check(valid):
         if not valid():
@@ -163,6 +180,19 @@ class Processor:
         return [
             context_for(i.record, spec.name, self.group_for(spec), i.element_index) for i in items
         ]
+
+    async def send(self, spec, publisher, publications, worker, kind, check, permanent=None):
+        """Publish through ``publisher``; a ``kafka.publish`` span when ``trace_kafka_operations``."""
+        if not publications or not self.settings.trace_kafka_operations:
+            return await publisher.publish(publications, worker, kind, check, permanent=permanent)
+        with get_tracer().start_as_current_span("kafka.publish", kind=SpanKind.PRODUCER) as span:
+            span.set_attribute("messaging.system", "kafka")
+            span.set_attribute(
+                "messaging.destination.name", ",".join(sorted({p.topic for p in publications}))
+            )
+            span.set_attribute("messaging.batch.message_count", len(publications))
+            span.set_attribute("qf.publication.kind", kind)
+            return await publisher.publish(publications, worker, kind, check, permanent=permanent)
 
     @staticmethod
     def key_for(spec, value, record):
@@ -211,8 +241,13 @@ class Processor:
                     else:
                         outgoing_headers = headers
                     publications.append(Publication(topic, body, key, outgoing_headers))
-            await self.publisher_for(spec).publish(
-                publications, spec.name, "output", lambda: self.check(valid)
+            await self.send(
+                spec,
+                self.publisher_for(spec),
+                publications,
+                spec.name,
+                "output",
+                lambda: self.check(valid),
             )
         finally:
             for span in spans:
@@ -279,8 +314,14 @@ class Processor:
             )
         publisher = self.publisher_for(spec)
         check = lambda: self.check(valid)  # noqa: E731
-        await publisher.publish(
-            publications, spec.name, "dlq", check, permanent=is_permanent_send_error
+        await self.send(
+            spec,
+            publisher,
+            publications,
+            spec.name,
+            "dlq",
+            check,
+            permanent=is_permanent_send_error,
         )
         refused = [p for p in publications if p.failed is not None]
         if refused:
@@ -305,8 +346,8 @@ class Processor:
                 "Dead letter refused by the broker; published a reference",
                 extra={"event": {"worker": spec.name, "topic": topic, "count": len(references)}},
             )
-            await publisher.publish(references, spec.name, "dlq", check)
-        self.metrics.processed.labels(spec.name, "dlq").inc(len(letters))
+            await self.send(spec, publisher, references, spec.name, "dlq", check)
+        self.count(spec, "dlq", len(letters))
         logger.warning(
             "Input routed to DLQ",
             extra={
@@ -325,6 +366,11 @@ class Processor:
     # ------------------------------------------------------------- decoding
     async def decode(self, spec, records, valid):
         """Decode records into items; undecodable records are dead-lettered at once."""
+        if spec.raw:  # undecoded bytes: nothing to reject
+            return [
+                Item(record, 0, record.value if record.value is not None else b"")
+                for record in records
+            ]
         items, rejected = [], []
         for record in records:
             try:
@@ -339,7 +385,7 @@ class Processor:
                 elements = [(0, value, RAW)]
             elif spec.split_arrays and isinstance(value, list):
                 if not value:
-                    self.metrics.processed.labels(spec.name, "skipped").inc()
+                    self.count(spec, "skipped")
                     continue
                 elements = [
                     (i, v, copy.deepcopy(v)) for i, v in enumerate(value) if isinstance(v, dict)
@@ -395,9 +441,7 @@ class Processor:
             async with self.deduplicator.filter(spec, records, valid) as selection:
                 selected, owned = selection
                 if len(selected) < len(records):
-                    self.metrics.processed.labels(spec.name, "duplicate").inc(
-                        len(records) - len(selected)
-                    )
+                    self.count(spec, "duplicate", len(records) - len(selected))
                 if not selected:
                     return True
                 return await self._handle(spec, selected, owned)
@@ -488,7 +532,9 @@ class Processor:
                         valid,
                         source_payload=call_payload,
                     )
-                    self.metrics.processed.labels(spec.name, "success").inc(len(pending))
+                    self.count(spec, "success", len(pending))
+                    if waits:
+                        notify(self.observer, "on_recovered", spec.name, waits)
                     return True
             except (DeliveryError, StaleAssignment, asyncio.CancelledError):
                 raise
@@ -505,9 +551,9 @@ class Processor:
                             }
                         },
                     )
-                    await asyncio.sleep(
-                        (policy.transient_backoff or DEFAULT_TRANSIENT_BACKOFF).delay(waits)
-                    )
+                    delay = (policy.transient_backoff or DEFAULT_TRANSIENT_BACKOFF).delay(waits)
+                    notify(self.observer, "on_transient", spec.name, waits, delay, exc)
+                    await asyncio.sleep(delay)
                     waits += 1
                     continue
                 self.metrics.failures.labels("handler").inc()
@@ -532,6 +578,9 @@ class Processor:
                 await self.delay(attempt, backoff)
                 attempt += 1
                 continue
+            if waits:
+                notify(self.observer, "on_recovered", spec.name, waits)
+                waits = 0
             if not retry:
                 return True
             if attempt + 1 == attempts:
@@ -608,7 +657,9 @@ class Processor:
                         )
                 elif outcome.kind == "retry":
                     retry.append((item, outcome.reason))
-            await self.publisher_for(spec).publish(
+            await self.send(
+                spec,
+                self.publisher_for(spec),
                 publications,
                 spec.name,
                 "output",
@@ -646,7 +697,7 @@ class Processor:
             ):
                 continue
             label = outcome.label or ("success" if outcome.kind == "ok" else "skipped")
-            self.metrics.processed.labels(spec.name, label).inc()
+            self.count(spec, label)
         return retry
 
     # ------------------------------------------------------------------ joins
@@ -675,7 +726,7 @@ class Processor:
             await asyncio.sleep(0.05)
         if claim.status != "ready":
             outcome = "aggregate_duplicate" if claim.status == "done" else "aggregate_stored"
-            self.metrics.processed.labels(spec.name, outcome).inc()
+            self.count(spec, outcome)
             return
         try:
             async with self.aggregation.heartbeat(claim):

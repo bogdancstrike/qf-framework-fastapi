@@ -7,6 +7,7 @@ import importlib
 import inspect
 import ssl
 import time
+from collections import Counter
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -14,13 +15,16 @@ from typing import Any
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, ConsumerRebalanceListener
 from aiokafka.admin import AIOKafkaAdminClient
+from opentelemetry.trace import SpanKind
 
 from ..commons.logger import logger
 from ..config import FrameworkSettings
 from ..decorators.kafka_workers import all_workers, validate_workers
 from ..observability import Metrics
+from ..tracing import get_tracer
 from .coordinator import CommitCoordinator
 from .policies import Admission
+from .observer import JOB_OUTCOMES, JobReport, notify
 from .processing import Processor, StaleAssignment
 
 
@@ -43,6 +47,8 @@ class Lane:
     consumer: Any = None
     coordinator: Any = None
     workers: list = field(default_factory=list)
+    index: int = 0
+    by_topic: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -53,6 +59,8 @@ class Partition:
     revoked: bool = False
     draining: bool = False
     lane: Lane | None = None
+    tp: Any = None
+    spec: Any = None
 
 
 class RebalanceListener(ConsumerRebalanceListener):
@@ -60,12 +68,14 @@ class RebalanceListener(ConsumerRebalanceListener):
         self.runtime, self.lane = runtime, lane
 
     async def on_partitions_revoked(self, revoked):
-        await self.runtime.revoke(revoked)
+        await self.runtime.revoke(revoked, self.lane)
 
     async def on_partitions_assigned(self, assigned):
         lane = self.lane or self.runtime.lanes[0]
         for tp in assigned:
-            self.runtime.partitions[tp] = Partition(lane.coordinator.assign(tp), lane=lane)
+            self.runtime.partitions[self.runtime.pkey(lane, tp)] = Partition(
+                lane.coordinator.assign(tp), lane=lane, tp=tp, spec=lane.by_topic.get(tp.topic)
+            )
 
 
 class KafkaRuntime:
@@ -96,8 +106,11 @@ class KafkaRuntime:
         workers=None,
         consumer_factory=None,
         producer_factory=None,
+        observer=None,
     ):
         self.settings, self.metrics = settings, metrics or Metrics()
+        self.observer = observer
+        self.disabled: list[str] = []
         self.consumer, self.producer, self.aggregation = consumer, producer, aggregation
         self.consumer_factory, self.producer_factory = consumer_factory, producer_factory
         self.workers = workers
@@ -198,18 +211,25 @@ class KafkaRuntime:
         )
 
     def select_workers(self, workers):
+        """Drop workers declared ``enabled=False`` or named in ``disabled_workers``."""
         disabled = set(self.settings.disabled_workers)
         unknown = disabled - {w.name for w in workers}
         if unknown:
             raise ValueError(
                 "disabled_workers names unknown workers: " + ", ".join(sorted(unknown))
             )
+        disabled |= {w.name for w in workers if not w.enabled}
+        self.disabled = sorted(disabled)
         if disabled:
             logger.info(
                 "Kafka workers disabled by configuration",
-                extra={"event": {"workers": sorted(disabled)}},
+                extra={"event": {"workers": self.disabled}},
             )
         return [w for w in workers if w.name not in disabled]
+
+    def pkey(self, lane, tp):
+        """Partition key: the ``TopicPartition`` in the first lane (2.0), ``(lane, tp)`` else."""
+        return tp if lane is None or lane.index == 0 else (lane.index, tp)
 
     async def verify_topics(self):
         """Refuse to start when an input, output or dead-letter topic is missing."""
@@ -245,7 +265,6 @@ class KafkaRuntime:
             raise RuntimeError("No Kafka workers registered")
         if self.settings.verify_topics:
             await self.verify_topics()
-        self.by_topic = {topic: w for w in self.workers for topic in w.topics_in}
         self.active = {w.name: set() for w in self.workers}
         self.admission = {w.name: Admission(w) for w in self.workers}
         self.executors = {
@@ -267,6 +286,18 @@ class KafkaRuntime:
             lanes.values(),
             key=lambda lane: (lane.bootstrap, lane.group, lane.offset_reset) != default_key,
         )
+        for index, lane in enumerate(self.lanes):
+            lane.index = index
+            for w in lane.workers:
+                for topic in w.topics_in:
+                    if topic in lane.by_topic:
+                        raise RuntimeError(
+                            f"Topic '{topic}' already handled by '{lane.by_topic[topic].name}' "
+                            f"in consumer group '{lane.group}'"
+                        )
+                    lane.by_topic[topic] = w
+        # 2.0 attribute: the first lane's topic owners.
+        self.by_topic = dict(self.lanes[0].by_topic)
         for index, lane in enumerate(self.lanes):
             injected = index == 0 and self.consumer is not None
             lane.consumer = self.consumer if injected else self.new_consumer(lane)
@@ -298,6 +329,7 @@ class KafkaRuntime:
             self.executors,
             self.aggregation,
             producers=self.producers,
+            observer=self.observer,
         )
         for lane in self.lanes:
             await self.connect(lane.consumer)
@@ -305,13 +337,17 @@ class KafkaRuntime:
         self.metrics.ready.set(1)
         self.task = asyncio.create_task(self.run(), name="qf-kafka-runtime")
 
-    def valid(self, tp, partition):
-        return not partition.revoked and self.partitions.get(tp) is partition
+    def valid(self, key, partition):
+        return not partition.revoked and self.partitions.get(key) is partition
 
-    def schedule(self, tp, partition, *, flush=False):
+    def spec_of(self, key, partition):
+        return partition.spec or self.by_topic[(partition.tp or key).topic]
+
+    def schedule(self, key, partition, *, flush=False):
         if partition.revoked or partition.draining or not partition.pending:
             return
-        spec = self.by_topic[tp.topic]
+        spec = self.spec_of(key, partition)
+        tp = key
         active = self.active[spec.name]
         admission = self.admission[spec.name]
         while partition.pending and len(active) < spec.max_workers:
@@ -354,7 +390,7 @@ class KafkaRuntime:
                     # still assigned otherwise leaves an unfinished offset gap
                     # forever; fail visibly so supervision can replay it.
                     if error is not None and (
-                        not isinstance(error, StaleAssignment) or self.valid(tp, partition)
+                        not isinstance(error, StaleAssignment) or self.valid(key, partition)
                     ):
                         self.error = error
                         self.ready = False
@@ -362,17 +398,32 @@ class KafkaRuntime:
 
             task.add_done_callback(done)
 
-    async def job(self, spec, tp, partition, records, generation):
+    async def job(self, spec, key, partition, records, generation):
         """Advance source progress only after handler/output/ledger completion."""
         self.metrics.inflight.labels(spec.name).inc()
+        outcomes = Counter()
+        token = JOB_OUTCOMES.set(outcomes)
+        started = time.monotonic()
         try:
-            ok = await self.processor.handle(spec, records, lambda: self.valid(tp, partition))
+            ok = await self.processor.handle(spec, records, lambda: self.valid(key, partition))
             if ok is False:
                 self.admission[spec.name].failure(generation)
             else:
                 self.admission[spec.name].success(generation)
-            coordinator = partition.lane.coordinator if partition.lane else self.coordinator
+            tp = partition.tp or key
+            _, coordinator = self.lane_of(partition)
             coordinator.complete(tp, [r.offset for r in records], partition.progress)
+            if self.observer is not None:
+                report = JobReport(
+                    worker=spec.name,
+                    topic=tp.topic,
+                    partition=tp.partition,
+                    records=len(records),
+                    outcomes=dict(outcomes),
+                    duration_s=time.monotonic() - started,
+                    ok=ok is not False,
+                )
+                notify(self.observer, "on_job", report)
         except (asyncio.CancelledError, StaleAssignment):
             self.admission[spec.name].abandon(generation)
             raise
@@ -380,10 +431,11 @@ class KafkaRuntime:
             self.admission[spec.name].failure(generation)
             raise
         finally:
+            JOB_OUTCOMES.reset(token)
             self.metrics.inflight.labels(spec.name).dec()
 
-    def enqueue(self, tp, records):
-        partition = self.partitions.get(tp)
+    def enqueue(self, tp, records, lane=None):
+        partition = self.partitions.get(self.pkey(lane, tp))
         if partition is None or partition.revoked or partition.draining:
             return
         progress = partition.progress
@@ -404,9 +456,10 @@ class KafkaRuntime:
 
     def tick(self, *, flush=False):
         # Rotate order to keep hot partitions from monopolizing shared worker slots.
-        for tp, partition in list(self.partitions.items()):
-            self.schedule(tp, partition, flush=flush)
-            spec = self.by_topic[tp.topic]
+        for key, partition in list(self.partitions.items()):
+            self.schedule(key, partition, flush=flush)
+            spec = self.spec_of(key, partition)
+            tp = partition.tp or key
             count = len(partition.progress.offsets)
             self.metrics.pending.labels(spec.name, tp.topic, str(tp.partition)).set(
                 len(partition.pending)
@@ -424,12 +477,16 @@ class KafkaRuntime:
                     consumer.resume(tp)
                 highwater = consumer.highwater(tp)
                 if highwater is not None and partition.progress.committed is not None:
-                    self.metrics.lag.labels(tp.topic, str(tp.partition)).set(
-                        max(0, highwater - partition.progress.committed)
-                    )
+                    lag = max(0, highwater - partition.progress.committed)
+                    self.metrics.lag.labels(tp.topic, str(tp.partition)).set(lag)
+                    if self.observer is not None:
+                        group = (
+                            partition.lane.group if partition.lane else self.settings.consumer_name
+                        )
+                        notify(self.observer, "on_lag", group, tp.topic, tp.partition, lag)
         if self.partitions:
-            tp = next(iter(self.partitions))
-            self.partitions[tp] = self.partitions.pop(tp)
+            key = next(iter(self.partitions))
+            self.partitions[key] = self.partitions.pop(key)
 
     async def commit(self, partitions=None):
         ok = True
@@ -443,15 +500,18 @@ class KafkaRuntime:
     async def run(self):
         last_commit = time.monotonic()
         polls: dict[int, asyncio.Task] = {}
-        consumers = [lane.consumer for lane in self.lanes] or [self.consumer]
+        polled_at: dict[int, int] = {}
+        lanes = self.lanes or [None]
         try:
             while not self.closing:
                 if self.error is not None:
                     raise self.error
                 self.wakeup.clear()
                 self.tick()
-                for index, consumer in enumerate(consumers):
+                for index, lane in enumerate(lanes):
+                    consumer = lane.consumer if lane else self.consumer
                     if index not in polls:
+                        polled_at[index] = time.time_ns()
                         polls[index] = asyncio.create_task(
                             consumer.getmany(
                                 timeout_ms=self.settings.poll_timeout_ms,
@@ -477,8 +537,11 @@ class KafkaRuntime:
                 for index, poll_task in list(polls.items()):
                     if poll_task in done:
                         del polls[index]
-                        for tp, messages in poll_task.result().items():
-                            self.enqueue(tp, messages)
+                        fetched = poll_task.result()
+                        if fetched and self.settings.trace_kafka_operations:
+                            self.trace_poll(lanes[index], fetched, polled_at[index])
+                        for tp, messages in fetched.items():
+                            self.enqueue(tp, messages, lanes[index])
                 now = time.monotonic()
                 self.metrics.loop_lag.set(max(0, now - started - timeout))
                 if now - last_commit >= self.settings.commit_tick_sec:
@@ -497,14 +560,28 @@ class KafkaRuntime:
             self.ready = False
             self.metrics.ready.set(0)
 
-    async def revoke(self, revoked):
+    def trace_poll(self, lane, fetched, started_ns):
+        """A ``kafka.poll`` span covering one non-empty fetch (``trace_kafka_operations``)."""
+        span = get_tracer().start_span("kafka.poll", kind=SpanKind.CONSUMER, start_time=started_ns)
+        span.set_attribute("messaging.system", "kafka")
+        span.set_attribute(
+            "messaging.consumer.group.name", lane.group if lane else self.settings.consumer_name
+        )
+        span.set_attribute(
+            "messaging.destination.name", ",".join(sorted({tp.topic for tp in fetched}))
+        )
+        span.set_attribute("messaging.batch.message_count", sum(len(r) for r in fetched.values()))
+        span.end()
+
+    async def revoke(self, revoked, lane=None):
         """Drain owned jobs, fence unfinished work, then commit safe prefixes.
 
         Unstarted and cancelled records stay uncommitted for the next owner.
         A synchronous function already executing in a thread cannot be killed;
         it must make external side effects independently idempotent.
         """
-        targets = {tp: self.partitions[tp] for tp in revoked if tp in self.partitions}
+        keys = [self.pkey(lane, tp) for tp in revoked]
+        targets = {key: self.partitions[key] for key in keys if key in self.partitions}
         # Stop dispatching new work but let already-running jobs finish while assignment is owned.
         for p in targets.values():
             p.draining = True
@@ -523,14 +600,15 @@ class KafkaRuntime:
         if unfinished:
             await asyncio.gather(*unfinished, return_exceptions=True)
         if self.coordinator:
-            for tp, p in targets.items():
+            for key, p in targets.items():
                 _, coordinator = self.lane_of(p)
-                await coordinator.commit({tp})
-            for tp, p in targets.items():
+                await coordinator.commit({p.tp or key})
+            for key, p in targets.items():
                 _, coordinator = self.lane_of(p)
+                tp = p.tp or key
                 coordinator.partitions.pop(tp, None)
-                self.partitions.pop(tp, None)
-                spec = self.by_topic[tp.topic]
+                self.partitions.pop(key, None)
+                spec = self.spec_of(key, p)
                 self.metrics.pending.labels(spec.name, tp.topic, str(tp.partition)).set(0)
                 self.metrics.uncommitted.labels(tp.topic, str(tp.partition)).set(0)
                 self.metrics.lag.labels(tp.topic, str(tp.partition)).set(0)
