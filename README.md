@@ -267,6 +267,90 @@ async def filter_audit(message, consumer_name, metadatas):
 
 Use `@retry_to_dlq`, `@rate_limit` and `@circuit_breaker` for worker policies; function-level `call_retry`, `call_rate_limit` and `call_circuit_breaker` are also exported. Their arguments and behavior are documented in [Migration.md](docs/Migration.md) and the decorator modules.
 
+## Framework 2.1 importer API
+
+Version 2.1 adds opt-in options for ingestion pipelines that replace a Python batch importer (QImporter): bad items of a batch must not fail their neighbours, dead letters must be replayable, and some flows read their own group or cluster. **Every default keeps the 2.0 behaviour.** The parity analysis and the reason for each option are in [ImporterParity.md](docs/ImporterParity.md).
+
+| Need | Option | Default |
+|---|---|---|
+| One record holds a JSON array of documents | `@kafka_handler(split_arrays=True)` | arrays go to DLQ |
+| Record timestamp, key, headers, coordinates | `@kafka_handler(with_context=True)` → `context=` | not passed |
+| Decide per message in a bulk call | return `Outcome.ok/skip/dead_letter/retry` | whole-job result |
+| Replayable dead letters with context headers | `@retry_to_dlq(dlq_format=HeaderDeadLetter(...))` | diagnostic envelope |
+| "Dependency down": retry without dead-lettering | `@retry_to_dlq(transient=(StoreDown,))` | attempt budget |
+| Own consumer group / start position / cluster | `consumer_group=`, `auto_offset_reset=`, `bootstrap_servers=` | shared consumer |
+| Messages without an injected `id` | `inject_id=False` | `id` filled from coordinates |
+| Output key from a document path | `key_by="system._id"` (`None`: source key) | `"id"` |
+| `json.dumps` byte format of outputs | `encoder=python_json` | compact JSON |
+| A worker that publishes nothing | `topics_out=[]` | at least one topic |
+| Switch workers off, refuse missing topics | `QSINT_DISABLED_WORKERS`, `QSINT_VERIFY_TOPICS` | all on, no check |
+
+### Per-message outcomes with record context
+
+```python
+from framework.decorators import kafka_handler, retry_to_dlq
+from framework.etl.dead_letter import HeaderDeadLetter
+from framework.etl.outcomes import Outcome
+from framework.streams.encoding import python_json
+
+
+class StoreUnavailable(Exception):
+    """Elasticsearch or Redis is down: nothing is wrong with the messages."""
+
+
+@retry_to_dlq(
+    max_attempts=3,
+    dlq_topic="dead_letter",
+    dlq_format=HeaderDeadLetter(worker_header="flow", max_value_bytes=1_000_000),
+    transient=(StoreUnavailable,),
+)
+@kafka_handler(
+    name="bigconnect",
+    topics_in=["bigconnect-scraper-data"],
+    topics_out=["output-data-importer"],
+    consumer_group="sd-bigconnect",
+    bulk_mode=True,
+    batch_size=500,
+    split_arrays=True,
+    with_context=True,
+    inject_id=False,
+    key_by="system._id",
+    encoder=python_json,
+)
+async def bigconnect(messages, consumer_name, metadatas, context):
+    outcomes = []
+    for message, ctx in zip(messages, context):
+        if not message.get("payload"):
+            outcomes.append(Outcome.dead_letter("missing payload", stage="route"))
+        elif is_stale(message, ctx.timestamp_ms):
+            outcomes.append(Outcome.skip("stale_version", label="skipped"))
+        else:
+            outcomes.append(Outcome.ok(await store(message), label="stored"))
+    return outcomes  # exactly one per message, in order
+```
+
+- `split_arrays`: `[{…}, {…}]` becomes two messages (`context.element_index` 0 and 1); `[]` is a skip; non-object elements are dropped and counted (`qf_decode_dropped_total`); invalid JSON and non-object values are dead-lettered at stage `decode` with the record bytes unchanged.
+- `Outcome.ok(*docs)` publishes each document to every output topic; `skip` publishes nothing; `dead_letter(reason, stage=, values=, headers=)` dead-letters now (default value: the source record bytes); `retry` re-invokes the handler for that message only, within `max_attempts`. A document the broker refuses permanently (too large, invalid or unauthorised topic) dead-letters its message with stage `forward` and header `target_topic`. A wrong outcome count dead-letters the call with reason `outcome_count_mismatch`.
+- `transient` exceptions retry the same messages with `ExponentialBackoff()` (1, 2, 4 … 60 s) until they succeed or the partition is revoked: nothing is dead-lettered and nothing is committed meanwhile.
+- `HeaderDeadLetter` publishes the replayable value with headers `reason` (≤ 2000 characters), `consumer`, `failed_at`, `stage`, the worker header, `source_topic`, `source_partition`, `source_offset`, `source_timestamp_ms` plus your `headers=`. A dead letter the broker refuses is replaced by `{"_truncated": true, "size": n, "sha256": "…"}`, so a source is never committed without its dead letter.
+
+### Own consumer group, cluster and start position
+
+```python
+@kafka_handler(
+    name="stt-relay",
+    topics_in=["stt-stream"],
+    topics_out=[],                       # a sink: publishes nothing
+    bootstrap_servers="stt-kafka:9092",  # another cluster; DLQ goes there too
+    consumer_group="sd-stt-relay",
+    auto_offset_reset="latest",
+)
+async def relay(message, consumer_name, metadatas):
+    await forward_to_gate(message)
+```
+
+Workers sharing `(bootstrap_servers, consumer_group, auto_offset_reset)` share one consumer; each distinct triple gets its own consumer, commits and rebalances, so one flow's rebalance never pauses another. An input topic still has one owning worker per process. To replay a dead letter with its original timestamp, use `KafkaClient.put_message(topic, raw_bytes, key, headers={...}, timestamp_ms=...)`.
+
 ## JSON endpoint mappings
 
 Existing namespace/model/endpoint declarations are compiled once into FastAPI routes and Pydantic schemas. Example `maps/endpoint.json`:
@@ -563,7 +647,7 @@ docs/            Specifications, architecture, operations and comparison
 
 - [Documentation index](docs/README.md), [getting started](docs/GettingStarted.md), [example catalog](examples/README.md)
 - [Worker contracts and cookbook](docs/Workers.md), [testing guide](docs/Testing.md), [troubleshooting](docs/Troubleshooting.md)
-- [Extending the framework](docs/Extending.md), [runtime audit and repeated pipeline evidence](docs/RuntimeAudit.md)
+- [Extending the framework](docs/Extending.md), [runtime audit and repeated pipeline evidence](docs/RuntimeAudit.md), [importer parity (2.1)](docs/ImporterParity.md), [changelog](CHANGELOG.md)
 - [Specification](docs/specs.md), [architecture](docs/architecture.md), [task status](docs/tasks.md)
 - [Migration and compatibility](docs/Migration.md), [configuration](docs/Configuration.md)
 - [Operations and failure recovery](docs/Operations.md), [distributed tracing](docs/Tracing.md)

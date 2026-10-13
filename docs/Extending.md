@@ -19,6 +19,11 @@ shows HTTP ingress, fan-out, joins, retries and tracing together.
 | Shared Redis client | `AggregationStore(settings, client=client)` | Store leaves an injected Redis client open; application closes it |
 | Alternate application runtime | `FrameworkApp(..., runtime_factory=...)` | Factory accepts settings/metrics; exposes async start/stop and ready/error; worker-only mode also requires task |
 | Application-specific configuration | `settings.extra`, worker metadata | Keep credentials in SecretStr-backed settings; avoid mutable globals and import-time clients |
+| Per-message results of a bulk call | Return `Outcome` objects | One per message, in order; `ok`/`skip`/`dead_letter`/`retry`; see [importer parity](ImporterParity.md) |
+| Dead-letter record layout | `@retry_to_dlq(dlq_format=...)` implementing `DeadLetterFormat.build(letter)` | Return value, key and headers; trace headers are added by the runtime; refused records become a sha256 reference |
+| Retry schedule | `@retry_to_dlq(backoff=..., transient_backoff=...)` implementing `Backoff.delay(attempt)` | Seconds to wait; `transient` exception classes retry without a budget |
+| Output byte format | `@kafka_handler(encoder=...)` | `Callable[[value], bytes]`; `compact_json` (default) or `python_json` |
+| Extra consumers and clusters in tests | `KafkaRuntime(consumer_factory=..., producer_factory=...)` | Called per extra lane / per extra cluster; the runtime starts and stops what they return |
 
 Configuration is snapshotted at startup: topic lists and nested worker metadata
 are copied. Changing the original `WorkerSpec` containers cannot change an active

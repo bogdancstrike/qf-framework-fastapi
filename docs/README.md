@@ -16,6 +16,7 @@ Start with the path matching what you need to do.
 | Use execution leases, common decorators and owned clients | [Utility audit and contracts](Utilities.md) |
 | Review ACK/Redis hardening and measured before/after costs | [Reliability hardening](Hardening.md) |
 | Extend collaborators and preserve concurrency/failure contracts | [Extension guide](Extending.md) |
+| Run batch-importer pipelines (per-message outcomes, replayable dead letters, own consumer groups) | [Importer parity (2.1)](ImporterParity.md) |
 | Review the concurrency audit and repeated five-stage trials | [Runtime audit](RuntimeAudit.md) |
 | Choose optional future framework features | [Twenty feature proposals](Roadmap.md) |
 | Follow trace IDs through Kafka, batches and Redis joins | [Distributed tracing](Tracing.md) |

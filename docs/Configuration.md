@@ -36,6 +36,10 @@ Generated from `FrameworkSettings` fields. Use `QSINT_` + uppercase field name u
 | `output_ack_timeout_sec` | `30` | `KAFKA_OUTPUT_ACK_TIMEOUT_SEC (Config bridge)` |
 | `producer_linger_ms` | `5` | `KAFKA_PRODUCER_LINGER_MS (Config bridge)` |
 | `producer_batch_size` | `65536` | `KAFKA_PRODUCER_BATCH_SIZE (Config bridge)` |
+| `producer_max_request_size` | `1048576` |  |
+| `producer_request_timeout_ms` | `40000` |  |
+| `disabled_workers` | `[]` | JSON list of worker names to skip at start-up (unknown names refuse start-up) |
+| `verify_topics` | `False` | Refuse start-up (`MissingTopicsError`) when an input, output or dead-letter topic is missing |
 | `kafka_security_protocol` | `PLAINTEXT` |  |
 | `kafka_sasl_mechanism` | `PLAIN` |  |
 | `kafka_sasl_username` | `None` |  |

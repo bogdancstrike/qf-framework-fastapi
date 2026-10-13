@@ -184,6 +184,10 @@ Rate limits count admitted **jobs**, including bulk jobs, per worker process. Th
 
 There is no generic handler execution deadline setting. Set deadlines on external calls or wrap your own operation in `asyncio.timeout()`. Cancellation should propagate; do not swallow `CancelledError`. Output/Redis transport retries have a separate budget and do not normally rerun successful user code. Kafka delivery tracks each receipt: confirmed outputs are skipped on retry, while pending ACK futures survive timeout and are awaited again. Failed receipts may be submitted again; process crashes and ambiguous transport failures can still duplicate delivery.
 
+## Per-message outcomes, record context and own consumers (2.1)
+
+Bulk handlers can settle each message on its own by returning one `Outcome` per message (`ok`, `skip`, `dead_letter`, `retry`); `with_context=True` passes the `RecordContext` (coordinates, key, record timestamp, headers, array element index); `split_arrays=True` turns a JSON-array value into one message per object element; `consumer_group`, `bootstrap_servers` and `auto_offset_reset` give a worker its own consumer. All are opt-in. See the [README section](../README.md#framework-21-importer-api) for examples and [ImporterParity.md](ImporterParity.md) for the rules they implement.
+
 ## Choosing idempotency boundaries
 
 | Mechanism | Protects | Does not protect |

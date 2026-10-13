@@ -10,6 +10,10 @@ QF_INTEGRATION=1 python -m pytest tests/test_horizontal_recovery.py -v
 
 This checks scale-up, active SIGKILL/replacement, committed partial joins after total worker restart and excess idle consumers beyond partition count. [Scaling](Scaling.md) explains the persistence/retention assumptions; [Hardening](Hardening.md) reports the separate 10k source-ledger and join performance measurements.
 
+## 2.1 importer options
+
+`tests/test_importer_parity.py` (45 unit tests) covers array splitting, record context, per-message outcomes, dead-letter formats, transient retries, backoff, validation and per-worker consumers/clusters with fake transports. `tests/test_importer_parity_live.py` (7 tests, `QF_INTEGRATION=1`) runs them against a real broker: split arrays with header dead letters and commits, independent consumer groups, `auto_offset_reset="latest"`, record timestamps and headers from `KafkaClient.put_message`, oversized outputs dead-lettered as references, transient retries holding the commit, and `verify_topics`.
+
 ## Fast local checks
 
 ```bash
