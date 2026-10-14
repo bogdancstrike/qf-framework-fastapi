@@ -307,11 +307,12 @@ class Processor:
         for letter in letters:
             self.check(valid)
             built = dlq_format.build(letter)
-            publications.append(
-                Publication(
-                    topic, built.value, built.key, self.dlq_headers(letter.record, built.headers)
-                )
+            headers = (
+                self.dlq_headers(letter.record, built.headers)
+                if built.trace_headers
+                else list(built.headers)
             )
+            publications.append(Publication(topic, built.value, built.key, headers))
         publisher = self.publisher_for(spec)
         check = lambda: self.check(valid)  # noqa: E731
         await self.send(
@@ -365,7 +366,7 @@ class Processor:
 
     # ------------------------------------------------------------- decoding
     async def decode(self, spec, records, valid):
-        """Decode records into items; undecodable records are dead-lettered at once."""
+        """Decode records into items; undecodable records follow ``spec.on_undecodable``."""
         if spec.raw:  # undecoded bytes: nothing to reject
             return [
                 Item(record, 0, record.value if record.value is not None else b"")
@@ -376,10 +377,9 @@ class Processor:
             try:
                 value = json.loads(record.value)
             except (ValueError, TypeError, UnicodeError) as exc:
-                if spec.split_arrays:
-                    rejected.append(self._decode_letter(spec, record, f"invalid_json: {exc}", exc))
-                else:
-                    await self.dlq(spec, [record], exc, 0, valid)
+                await self._undecodable(
+                    spec, record, "invalid_json", f"invalid_json: {exc}", exc, rejected, valid
+                )
                 continue
             if isinstance(value, dict):
                 elements = [(0, value, RAW)]
@@ -392,7 +392,9 @@ class Processor:
                 ]
                 dropped = len(value) - len(elements)
                 if not elements:
-                    rejected.append(self._decode_letter(spec, record, "not_an_object"))
+                    await self._undecodable(
+                        spec, record, "not_an_object", "not_an_object", None, rejected, valid
+                    )
                     continue
                 if dropped:
                     self.metrics.decode_dropped.labels(spec.name, "non_object_element").inc(dropped)
@@ -403,12 +405,9 @@ class Processor:
                         },
                     )
             else:
-                if spec.split_arrays:
-                    rejected.append(self._decode_letter(spec, record, "not_an_object"))
-                else:
-                    await self.dlq(
-                        spec, [record], ValueError("Kafka payload must be a JSON object"), 0, valid
-                    )
+                await self._undecodable(
+                    spec, record, "not_an_object", "not_an_object", None, rejected, valid
+                )
                 continue
             for index, element, original in elements:
                 if (
@@ -421,6 +420,21 @@ class Processor:
                 items.append(Item(record, index, element, original))
         await self.dead_letters(spec, rejected, valid)
         return items
+
+    async def _undecodable(self, spec, record, label, reason, error, rejected, valid):
+        """Drop ``record`` or dead-letter it (batched with ``split_arrays``, else at once)."""
+        if spec.on_undecodable == "drop":
+            self.metrics.decode_dropped.labels(spec.name, label).inc()
+            self.count(spec, "skipped")
+            logger.warning(
+                "Dropped an undecodable record",
+                extra={"event": {"worker": spec.name, "reason": label, "topic": record.topic}},
+            )
+        elif spec.split_arrays:
+            rejected.append(self._decode_letter(spec, record, reason, error))
+        else:  # the 2.0 path: the format sees the error, not a reason text
+            error = error or ValueError("Kafka payload must be a JSON object")
+            await self.dlq(spec, [record], error, 0, valid)
 
     def _decode_letter(self, spec, record, reason, error=None):
         return DeadLetter(

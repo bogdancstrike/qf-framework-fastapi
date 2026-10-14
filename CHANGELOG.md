@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.3 — 2026-10-14
+
+Two Kafka worker options a service needs to reproduce another producer's behaviour exactly.
+
+### Added
+- `@kafka_handler(on_undecodable="dead_letter" | "drop")` (`WorkerSpec.on_undecodable`, default `"dead_letter"` = the previous behaviour): a record that is not JSON, or not a JSON object (with `split_arrays`: an array without object elements), is dropped instead of dead-lettered — logged, counted in `qf_decode_dropped_total{reason="invalid_json"|"not_an_object"}` and as a `skipped` message, its offset committed. An empty array is a skip either way.
+- `DeadLetterRecord(trace_headers=False)`: a `DeadLetterFormat` can publish its headers exactly as built; by default the W3C trace headers continuing the source record's trace are still added.
+
 ## 2.2.2 — 2026-10-14
 
 Observability bounds needed by service-data's T-02 scenarios.

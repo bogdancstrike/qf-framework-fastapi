@@ -14,6 +14,9 @@ from .intern import RetryToDlqConfig, CircuitBreakerConfig, RateLimitConfig
 
 WorkerKind = Literal["handler", "aggregator"]
 OffsetReset = Literal["earliest", "latest"]
+#: What happens to a record that is not JSON or not a JSON object (2.2.3).
+Undecodable = Literal["dead_letter", "drop"]
+UNDECODABLE_POLICIES = ("dead_letter", "drop")
 
 
 def _get_by_path(obj: dict, path: str) -> Any:
@@ -71,6 +74,14 @@ class WorkerSpec:
     - ``encoder``: bytes encoder of outputs (``None``: compact JSON).
     - ``raw``: the handler receives the record value bytes, undecoded.
     - ``enabled``: ``False`` keeps the worker declared but never started.
+
+    2.2.3 option:
+
+    - ``on_undecodable``: a record that is not JSON, or not a JSON object (with
+      ``split_arrays``: an array without object elements), is dead-lettered at stage
+      ``decode`` (``"dead_letter"``, the default) or dropped (``"drop"``: logged, counted
+      in ``qf_decode_dropped_total{reason}`` and as a ``skipped`` message, its offset
+      committed). An empty array is a skip either way.
     """
 
     kind: WorkerKind
@@ -103,6 +114,7 @@ class WorkerSpec:
     encoder: Optional[Callable[[Any], bytes]] = None
     raw: bool = False
     enabled: bool = True
+    on_undecodable: Undecodable = "dead_letter"
 
 
 _WORKERS_BY_NAME: Dict[str, WorkerSpec] = {}
@@ -184,6 +196,10 @@ def validate_worker(spec: WorkerSpec) -> None:
         raise ValueError(f"Worker '{spec.name}': encoder must be callable")
     if spec.raw and spec.split_arrays:
         raise ValueError(f"Worker '{spec.name}': raw and split_arrays are exclusive")
+    if spec.on_undecodable not in UNDECODABLE_POLICIES:
+        raise ValueError(
+            f"Worker '{spec.name}': on_undecodable must be one of {UNDECODABLE_POLICIES}"
+        )
     # An empty topics_out is a sink: the worker publishes nothing (returning outputs fails).
 
     if spec.kind == "handler" and spec.bulk_mode:
@@ -333,6 +349,7 @@ def _build_spec(declaration: Dict[str, Any], fn: Callable[..., Any]) -> WorkerSp
         encoder=d["encoder"],
         raw=bool(d["raw"]),
         enabled=bool(d["enabled"]),
+        on_undecodable=d["on_undecodable"],
     )
 
 
@@ -359,13 +376,15 @@ def kafka_handler(
     encoder: Optional[Callable[[Any], bytes]] = None,
     raw: bool = False,
     enabled: Any = True,
+    on_undecodable: Undecodable = "dead_letter",
 ):
     """Declare a worker: a normal handler or a correlation join.
 
     `aggregator=True` defaults the join key to `id`. Supplying `aggregate_by`
     also selects aggregation; dotted paths are supported. The 2.1 keyword
     options (`consumer_group` … `enabled`) are described on :class:`WorkerSpec`;
-    their defaults keep the 2.0 behaviour. `topics_out=[]` declares a sink.
+    their defaults keep the 2.0 behaviour; `on_undecodable` (2.2.3) likewise. `topics_out=[]`
+    declares a sink.
 
     A module-level function is registered at import (2.0 behaviour). A method
     (first parameter ``self``/``cls``), or a function with a deferred value, is
@@ -399,6 +418,7 @@ def kafka_handler(
         "encoder": encoder,
         "raw": raw,
         "enabled": enabled,
+        "on_undecodable": on_undecodable,
     }
     deferred = any(callable(declaration[key]) for key in DEFERRABLE)
 

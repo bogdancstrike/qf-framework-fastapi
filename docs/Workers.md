@@ -188,6 +188,38 @@ There is no generic handler execution deadline setting. Set deadlines on externa
 
 Bulk handlers can settle each message on its own by returning one `Outcome` per message (`ok`, `skip`, `dead_letter`, `retry`); `with_context=True` passes the `RecordContext` (coordinates, key, record timestamp, headers, array element index); `split_arrays=True` turns a JSON-array value into one message per object element; `consumer_group`, `bootstrap_servers` and `auto_offset_reset` give a worker its own consumer. All are opt-in. See the [README section](../README.md#framework-21-importer-api) for examples and [ImporterParity.md](ImporterParity.md) for the rules they implement.
 
+## Undecodable records and exact dead letters (2.2.3)
+
+A record that is not JSON, or not a JSON object, is dead-lettered at stage `decode` by default.
+`on_undecodable="drop"` drops it instead: it is logged, counted in
+`qf_decode_dropped_total{reason="invalid_json"|"not_an_object"}` and as a `skipped` message, and
+its offset is committed (the behaviour of a consumer that only logs what it cannot parse).
+
+```python
+@kafka_handler(name="ingest", topics_in=["in"], topics_out=["out"], on_undecodable="drop")
+async def ingest(self, message, consumer_name, metadatas): ...
+```
+
+A `DeadLetterFormat` builds each dead letter from the `DeadLetter` facts (source record, worker,
+consumer group, stage, attempts, error, reason, value). To reproduce another producer's record
+byte for byte, return `DeadLetterRecord(value, key, headers, trace_headers=False)`: the headers
+are published exactly as built, without the W3C trace headers the runtime adds by default.
+
+```python
+@dataclass(frozen=True)
+class LegacyDeadLetter:
+    def build(self, letter: DeadLetter) -> DeadLetterRecord:
+        message = json.loads(letter.record.value) if letter.raw else letter.value
+        headers = [("reason", f"Failed to process message: {message}".encode()),
+                   ("consumer", letter.consumer_group.encode())]
+        return DeadLetterRecord(json.dumps(message).encode(), None, headers, trace_headers=False)
+
+
+@retry_to_dlq(dlq_topic="dead_letter", dlq_format=LegacyDeadLetter())
+@kafka_handler(...)
+async def ingest(self, message, consumer_name, metadatas): ...
+```
+
 ## Choosing idempotency boundaries
 
 | Mechanism | Protects | Does not protect |

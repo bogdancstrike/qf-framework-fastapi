@@ -12,6 +12,10 @@ worker with ``@retry_to_dlq(..., dlq_format=...)``.
   ``consumer``, ``failed_at``, ``stage``, the worker, ``source_topic``,
   ``source_partition``, ``source_offset``, ``source_timestamp_ms`` and the caller's
   extra headers. A replay tool can republish the value unchanged to ``source_topic``.
+* Any other format: implement :class:`DeadLetterFormat` (``build(letter) ->
+  DeadLetterRecord``) from the :class:`DeadLetter` facts (source record, worker,
+  consumer group, stage, attempts, error, reason, value); return
+  ``DeadLetterRecord(..., trace_headers=False)`` to publish exactly the headers built.
 """
 
 from __future__ import annotations
@@ -87,18 +91,29 @@ RAW: Any = _Raw()
 
 @dataclass(frozen=True)
 class DeadLetterRecord:
-    """One record to publish on the dead-letter topic."""
+    """One record to publish on the dead-letter topic.
+
+    Attributes:
+        value: The record value.
+        key: The record key (``None``: no key).
+        headers: The record headers.
+        trace_headers: ``True`` (default) adds the W3C trace headers continuing the source
+            record's trace; ``False`` publishes ``headers`` exactly as built (2.2.3), for
+            formats that must reproduce another producer's record byte for byte.
+    """
 
     value: bytes
     key: bytes | None
     headers: list[tuple[str, bytes]]
+    trace_headers: bool = True
 
 
 class DeadLetterFormat(Protocol):
     """Strategy: build the dead-letter record of one failed message."""
 
     def build(self, letter: DeadLetter) -> DeadLetterRecord:
-        """The record (value, key, headers) to publish; trace headers are added afterwards."""
+        """The record (value, key, headers) to publish; trace headers are added afterwards
+        unless the record sets ``trace_headers=False``."""
         ...
 
 

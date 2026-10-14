@@ -1,7 +1,9 @@
 # Reusable application components (2.2)
 
 Building blocks that QSINT services had written each for themselves. Each is an opt-in import.
-The legacy HTTP contract has its own page: [Operations-HTTP.md](Operations-HTTP.md).
+The legacy HTTP contract has its own page: [Operations-HTTP.md](Operations-HTTP.md). Kafka
+worker options (including 2.2.3's `on_undecodable` and exact dead-letter records) are in
+[Workers.md](Workers.md).
 
 ## Start-up dependency gate — `framework.health`
 
