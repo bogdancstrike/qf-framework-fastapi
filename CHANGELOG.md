@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.2.2 — 2026-10-14
+
+Observability bounds needed by service-data's T-02 scenarios.
+
+### Added
+- `init_tracing(resource_attributes=…, export_timeout_s=…)`: extra tracing resource attributes next to `service.name`, and an upper bound for every export, retries included (default 3 s instead of the exporter's 10 s). `FrameworkSettings.tracing_resource_attributes` and `otlp_export_timeout_sec` feed the application runner.
+- `ScrubbingJSONFormatter(max_line_length=200)` and `configure_event_logging(max_traceback_line=…)`: traceback lines longer than the limit are cut to `<first chars>… <truncated len=N>` (an exception message can carry a whole document); `truncate_lines` helper.
+
+### Changed
+- `shutdown_tracing()` closes the provider (export what is queued, then shut down) instead of only flushing; with an unreachable collector it returns within about the export timeout. The framework tracer is a no-op afterwards.
+
+### Fixed
+- `scrub` hides the password of a DSN without a user (`redis://:pw@host` → `redis://:***@host`).
+
 ## 2.2.1 — 2026-10-13
 
 Found while switching service-data to 2.2.0.

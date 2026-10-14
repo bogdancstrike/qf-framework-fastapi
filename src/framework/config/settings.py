@@ -76,6 +76,10 @@ class FrameworkSettings(BaseSettings):
     )
     otlp_endpoint: str | None = None
     otlp_insecure: bool = False
+    #: Upper bound of one span export, retries included; also bounds the shutdown flush.
+    otlp_export_timeout_sec: float = Field(default=3.0, gt=0)
+    #: Extra tracing resource attributes (e.g. ``deployment.environment``).
+    tracing_resource_attributes: dict[str, str] = Field(default_factory=dict)
     service_name: str | None = None
     log_endpoints: bool = Field(
         default=False, validation_alias=AliasChoices("LOG_ENDPOINTS", "QSINT_LOG_ENDPOINTS")

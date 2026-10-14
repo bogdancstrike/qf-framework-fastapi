@@ -66,7 +66,7 @@ def test_redact_hides_keys_long_strings_and_secrets():
 
 def test_scrub_leaves_plain_text_alone():
     assert scrub("plain words") == "plain words"
-    assert scrub("redis://:pw@host and ?token=abc") == "redis://:pw@host and ?token=***"
+    assert scrub("redis://:pw@host and ?token=abc") == "redis://:***@host and ?token=***"
 
 
 def test_event_logger_writes_fields_as_json(caplog):
@@ -94,6 +94,37 @@ def test_scrubbing_formatter_scrubs_tracebacks():
         )
     line = json.loads(ScrubbingJSONFormatter().format(record))
     assert "hunter2" not in line["exception"] and "app:***@db" in line["exception"]
+
+
+def test_scrub_hides_a_password_without_a_user():
+    assert scrub("redis://:pw@h:6379/0") == "redis://:***@h:6379/0"
+
+
+def _exception_record(exc: BaseException) -> logging.LogRecord:
+    return logging.LogRecord(
+        "t", logging.ERROR, __file__, 1, "failed", (), (type(exc), exc, exc.__traceback__)
+    )
+
+
+def test_scrubbing_formatter_cuts_long_traceback_lines():
+    document = "Guvernul a anuntat masuri noi pentru economie. " * 40
+    try:
+        raise ValueError(f"cannot index {document} via redis://:pw@h:6379/0")
+    except ValueError as exc:
+        record = _exception_record(exc)
+    rendered = json.loads(ScrubbingJSONFormatter().format(record))["exception"]
+    assert document not in rendered and "pw" not in rendered
+    assert "<truncated len=" in rendered and "Traceback" in rendered
+
+
+def test_scrubbing_formatter_line_limit_is_configurable():
+    try:
+        raise ValueError("x" * 50)
+    except ValueError as exc:
+        record = _exception_record(exc)
+    short = json.loads(ScrubbingJSONFormatter(max_line_length=20).format(record))["exception"]
+    full = json.loads(ScrubbingJSONFormatter(max_line_length=100).format(record))["exception"]
+    assert "<truncated len=62>" in short and "x" * 50 in full
 
 
 def test_configure_event_logging_is_idempotent():

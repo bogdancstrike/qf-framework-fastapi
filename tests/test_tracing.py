@@ -98,3 +98,42 @@ async def test_bulk_dlq_keeps_each_message_trace_id(settings, spec, monkeypatch)
     ]
     assert actual == trace_ids
     provider.shutdown()
+
+
+def _closed_port() -> int:
+    import socket
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def test_resource_attributes_join_the_service_name():
+    provider = tracing.init_tracing(
+        "svc",
+        f"127.0.0.1:{_closed_port()}",
+        insecure=True,
+        enabled=True,
+        resource_attributes={"deployment.environment": "qsint", "service.name": "ignored"},
+    )
+    try:
+        attributes = provider.resource.attributes
+        assert attributes["service.name"] == "svc"
+        assert attributes["deployment.environment"] == "qsint"
+    finally:
+        tracing.shutdown_tracing()
+
+
+def test_shutdown_is_bounded_when_the_collector_is_unreachable():
+    import time
+
+    tracing.init_tracing(
+        "svc", f"127.0.0.1:{_closed_port()}", insecure=True, enabled=True, export_timeout_s=1.0
+    )
+    for number in range(100):
+        with tracing.get_tracer().start_as_current_span("unexported", attributes={"n": number}):
+            pass
+    started = time.monotonic()
+    tracing.shutdown_tracing()
+    assert time.monotonic() - started < 3
+    assert not tracing.get_tracer().start_span("after").is_recording()

@@ -10,7 +10,8 @@
 - `scrub`: DSN passwords (``scheme://user:***@host``) and URL signatures or tokens hidden in
   free text;
 - `ScrubbingJSONFormatter`: the framework's JSON line with tracebacks passed through `scrub`
-  (exception messages can carry a DSN or a presigned URL);
+  (exception messages can carry a DSN or a presigned URL) and long traceback lines cut
+  (an exception message can carry a whole document);
 - `configure_event_logging(root, level)`: install the formatter on an application's logger tree.
 
 Example::
@@ -47,10 +48,12 @@ MAX_STRING = 256
 MAX_DEPTH = 4
 #: Items of a list shown before ``"<+N more>"``.
 MAX_ITEMS = 20
+#: Traceback lines longer than this keep only their first characters.
+MAX_TRACEBACK_LINE = 200
 #: Libraries kept at WARNING unless the level is DEBUG.
 NOISY_LIBRARIES = ("elasticsearch", "elastic_transport", "aiokafka", "httpx", "httpcore", "asyncio")
 
-_DSN_PASSWORD = re.compile(r"(?P<head>[A-Za-z][A-Za-z0-9+.-]*://[^\s:/@]+:)[^\s@/]+@")
+_DSN_PASSWORD = re.compile(r"(?P<head>[A-Za-z][A-Za-z0-9+.-]*://[^\s:/@]*:)[^\s@/]+@")
 _URL_SECRET = re.compile(
     r"(?P<head>[?&](?:X-Amz-(?:Signature|Credential|Security-Token)"
     r"|Signature|token|access_token|api_key|apikey)=)[^&\s\"']+",
@@ -172,12 +175,31 @@ class EventLogger(logging.LoggerAdapter):
         )
 
 
+def truncate_lines(text: str, limit: int = MAX_TRACEBACK_LINE) -> str:
+    """`text` with every line longer than `limit` cut to ``<first chars>… <truncated len=N>``."""
+    return "\n".join(
+        line if len(line) <= limit else f"{line[:limit]}… <truncated len={len(line)}>"
+        for line in text.split("\n")
+    )
+
+
 class ScrubbingJSONFormatter(JSONFormatter):
-    """The framework's JSON line, with formatted tracebacks passed through `scrub`."""
+    """The framework's JSON line, with formatted tracebacks scrubbed and their long lines cut.
+
+    Args:
+        max_line_length: Traceback lines longer than this keep only their first characters
+            (an exception message can carry a whole document).
+    """
+
+    def __init__(
+        self, *args: Any, max_line_length: int = MAX_TRACEBACK_LINE, **kwargs: Any
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.max_line_length = max_line_length
 
     def formatException(self, ei: Any) -> str:
-        """The stdlib traceback text, scrubbed."""
-        return scrub(super().formatException(ei))
+        """The stdlib traceback text, scrubbed, long lines cut."""
+        return truncate_lines(scrub(super().formatException(ei)), self.max_line_length)
 
 
 def get_event_logger(
@@ -188,7 +210,11 @@ def get_event_logger(
 
 
 def configure_event_logging(
-    root: str, level: str = "INFO", *, quiet: Collection[str] = NOISY_LIBRARIES
+    root: str,
+    level: str = "INFO",
+    *,
+    quiet: Collection[str] = NOISY_LIBRARIES,
+    max_traceback_line: int = MAX_TRACEBACK_LINE,
 ) -> None:
     """Install JSON event logging on the logger tree `root` (and the framework's). Idempotent.
 
@@ -196,13 +222,14 @@ def configure_event_logging(
         root: The application's root logger name (e.g. ``"myapp"``).
         level: Level of `root` and the framework logger.
         quiet: Libraries kept at WARNING unless `level` is DEBUG.
+        max_traceback_line: Traceback lines longer than this are cut.
     """
     configure_framework_logging(level)
     logger = logging.getLogger(root)
     if not any(getattr(h, "_qf_events", False) for h in logger.handlers):
         handler = logging.StreamHandler()
         handler._qf_events = True  # type: ignore[attr-defined]
-        handler.setFormatter(ScrubbingJSONFormatter())
+        handler.setFormatter(ScrubbingJSONFormatter(max_line_length=max_traceback_line))
         logger.addHandler(handler)
     logger.setLevel(level.upper())
     logger.propagate = False

@@ -57,6 +57,8 @@ class FrameworkApp:
                 self.settings.otlp_endpoint,
                 self.settings.otlp_insecure,
                 enabled=self.settings.enable_tracing,
+                resource_attributes=self.settings.tracing_resource_attributes,
+                export_timeout_s=self.settings.otlp_export_timeout_sec,
             )
             try:
                 if self.settings.enable_etl:
@@ -111,6 +113,8 @@ class FrameworkApp:
                 self.settings.otlp_endpoint,
                 self.settings.otlp_insecure,
                 enabled=self.settings.enable_tracing,
+                resource_attributes=self.settings.tracing_resource_attributes,
+                export_timeout_s=self.settings.otlp_export_timeout_sec,
             )
             await runtime.start()
             waiter = asyncio.create_task(stop.wait())

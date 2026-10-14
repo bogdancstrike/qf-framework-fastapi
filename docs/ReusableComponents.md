@@ -78,7 +78,10 @@ the framework's line (with request and trace ids). Fields are passed through `re
 - containers are walked to depth 4 and 20 items.
 
 `ScrubbingJSONFormatter` (installed by `configure_event_logging`) also scrubs formatted
-tracebacks, since exception messages often carry a DSN or a presigned URL.
+tracebacks, since exception messages often carry a DSN or a presigned URL, and cuts every
+traceback line longer than 200 characters to `<first 200 chars>… <truncated len=N>`, since an
+exception message can carry a whole document (`configure_event_logging(...,
+max_traceback_line=N)` or `ScrubbingJSONFormatter(max_line_length=N)` to change it).
 
 ## Span helpers — `framework.tracing.spans`
 
@@ -96,6 +99,12 @@ await http.post(url, json=body, headers=inject_http_headers())
 
 Spans use the process tracer (`init_tracing`), read at call time. Attributes are redacted like
 log fields; an exception is recorded, marks the span failed and is re-raised.
+
+`init_tracing(..., resource_attributes={"deployment.environment": "prod"},
+export_timeout_s=3.0)` adds resource attributes next to `service.name` and bounds every export,
+retries included; `shutdown_tracing()` exports what is queued and closes the provider within
+about that time even when the collector is unreachable. The application runner reads both from
+`FrameworkSettings.tracing_resource_attributes` and `otlp_export_timeout_sec`.
 
 ## CircuitBreaker — `framework.resilience`
 
